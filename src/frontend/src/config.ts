@@ -42,10 +42,7 @@ export async function loadConfig(): Promise<Config> {
       backend_canister_id: (config.backend_canister_id === "undefined"
         ? backendCanisterId
         : config.backend_canister_id) as string,
-      project_id:
-        config.project_id !== "undefined"
-          ? config.project_id
-          : "0000000-0000-0000-0000-00000000000",
+      project_id: config.project_id !== "undefined" ? config.project_id : "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin:
         config.ii_derivation_origin === "undefined"
           ? undefined
@@ -58,12 +55,13 @@ export async function loadConfig(): Promise<Config> {
       console.error("CANISTER_ID_BACKEND is not set");
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
-    return {
+    const fallbackConfig = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
       project_id: "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin: undefined,
     };
+    return fallbackConfig;
   }
 }
 
