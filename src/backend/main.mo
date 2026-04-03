@@ -295,20 +295,17 @@ actor {
   };
 
   public query ({ caller }) func getAllShows(publicOnly : Bool) : async [Show.Show] {
-    let iter = showsV2.values().map(
-      func(show) {
-        if (publicOnly) {
-          if (show.isPublic) {
-            ?show;
-          } else {
-            null;
-          };
-        } else {
-          ?show;
+    let results = List.empty<Show.Show>();
+    for ((_, show) in showsV2.entries()) {
+      if (publicOnly) {
+        if (show.isPublic) {
+          results.add(show);
         };
-      }
-    );
-    iter.toArray().filterMap(func(x) { x }).sort();
+      } else {
+        results.add(show);
+      };
+    };
+    results.toArray().sort();
   };
 
   public query func searchShows(searchTerm : Text) : async [Show.Show] {

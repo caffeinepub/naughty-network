@@ -58,13 +58,12 @@ export async function loadConfig(): Promise<Config> {
       console.error("CANISTER_ID_BACKEND is not set");
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
-    const fallbackConfig = {
+    return {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
       project_id: "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin: undefined,
     };
-    return fallbackConfig;
   }
 }
 
@@ -121,11 +120,10 @@ export async function createActorWithConfig(
       console.error(err);
     });
   }
-  const actorOptions: CreateActorOptions = {
-    ...resolvedOptions,
-    agent: agent,
-    processError,
-  };
 
-  return createActor(config.backend_canister_id, actorOptions);
+  return createActor(config.backend_canister_id, {
+    ...resolvedOptions,
+    agent,
+    processError,
+  });
 }
