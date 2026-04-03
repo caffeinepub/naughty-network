@@ -10,16 +10,22 @@ interface VideoPlayerProps {
 function getEmbedUrl(url: string): string | null {
   if (!url) return null;
   // YouTube
-  const ytMatch = url.match(
-    /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/,
+  const ytId = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)?([\w-]{11})(?:[&?]|$)/,
   );
-  if (ytMatch) {
-    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0`;
+  const ytIdFull = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([\w-]{11})/,
+  );
+  if (ytIdFull) {
+    return `https://www.youtube.com/embed/${ytIdFull[1]}?autoplay=0&rel=0&modestbranding=1&showinfo=0&controls=1&iv_load_policy=3&fs=1&color=white&hl=en`;
+  }
+  if (ytId && (url.includes("youtube") || url.includes("youtu.be"))) {
+    return `https://www.youtube.com/embed/${ytId[1]}?autoplay=0&rel=0&modestbranding=1&showinfo=0&controls=1&iv_load_policy=3&fs=1&color=white&hl=en`;
   }
   // Vimeo
   const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
   if (vimeoMatch) {
-    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}?title=0&byline=0&portrait=0&badge=0&autopause=0&player_id=0`;
   }
   return null;
 }
@@ -39,6 +45,7 @@ export default function VideoPlayer({
   title,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -75,7 +82,13 @@ export default function VideoPlayer({
   };
 
   const handleFullscreen = () => {
-    videoRef.current?.requestFullscreen();
+    const container = containerRef.current;
+    if (!container) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      container.requestFullscreen();
+    }
   };
 
   const handleTimeUpdate = () => {
@@ -121,21 +134,45 @@ export default function VideoPlayer({
     );
   }
 
-  // YouTube / Vimeo embed
+  // YouTube / Vimeo embed — wrapped in branded container, title hidden
   if (isEmbed && embedUrl) {
     return (
       <div
+        ref={containerRef}
         className="relative w-full aspect-video bg-black rounded-lg overflow-hidden"
         data-ocid="video.canvas_target"
       >
+        {/* Overlay bar covers platform title/branding at top */}
+        <div
+          className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
+          style={{
+            height: "52px",
+            background: "linear-gradient(to bottom, #000 55%, transparent)",
+          }}
+        />
+
+        {/* iframe fills container — no title attribute exposed */}
         <iframe
           key={embedUrl}
           src={embedUrl}
-          title={title ?? "Video"}
-          className="w-full h-full"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          title="Video Player"
+          className="absolute inset-0 w-full h-full"
+          style={{ border: "none" }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; web-share"
           allowFullScreen
+          referrerPolicy="no-referrer"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
         />
+
+        {/* Custom fullscreen button */}
+        <button
+          type="button"
+          onClick={handleFullscreen}
+          className="absolute bottom-3 right-3 z-20 text-white bg-black/50 rounded p-1.5 hover:bg-primary/80 transition-colors"
+          aria-label="Fullscreen"
+        >
+          <Maximize size={16} />
+        </button>
       </div>
     );
   }
@@ -143,6 +180,7 @@ export default function VideoPlayer({
   // Direct MP4 / other video URL
   return (
     <div
+      ref={containerRef}
       className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group"
       data-ocid="video.canvas_target"
     >
@@ -155,6 +193,9 @@ export default function VideoPlayer({
         className="w-full h-full object-contain"
         onTimeUpdate={handleTimeUpdate}
         onEnded={() => setPlaying(false)}
+        title="Video Player"
+        controlsList="nodownload noremoteplayback"
+        disablePictureInPicture
       />
 
       {/* Controls overlay */}
