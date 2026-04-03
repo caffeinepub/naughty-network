@@ -16,13 +16,16 @@ import {
   Lock,
   Plus,
   Trash2,
+  Upload,
   Users,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Episode, Show } from "../backend";
+import { createStorageClient } from "../config";
+import { useActor } from "../hooks/useActor";
 import {
   useAllShows,
   useAllUsers,
@@ -41,6 +44,12 @@ type UserRecord = {
   joinedAt: bigint;
 };
 
+type StorageCertActor = {
+  _caffeineStorageCreateCertificate: (
+    hash: string,
+  ) => Promise<{ method: string; blob_hash: string }>;
+};
+
 function ThumbnailPreview({ url }: { url: string }) {
   const [error, setError] = useState(false);
   if (!url || error) return null;
@@ -52,6 +61,92 @@ function ThumbnailPreview({ url }: { url: string }) {
         className="w-full h-full object-cover"
         onError={() => setError(true)}
       />
+    </div>
+  );
+}
+
+// Video upload button component - uploads a file and calls onUrl with the resulting URL
+function VideoUploadButton({
+  actor,
+  onUrl,
+}: {
+  actor: StorageCertActor | null;
+  onUrl: (url: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!actor) {
+      toast.error("Not connected to backend. Please wait and try again.");
+      return;
+    }
+    setUploading(true);
+    setProgress(0);
+    try {
+      const storageClient = await createStorageClient(
+        actor as StorageCertActor,
+      );
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const { hash } = await storageClient.putFile(bytes, (pct) => {
+        setProgress(pct);
+      });
+      const url = await storageClient.getDirectURL(hash);
+      onUrl(url);
+      toast.success("Video uploaded!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Upload failed: ${msg.slice(0, 120)}`);
+    } finally {
+      setUploading(false);
+      setProgress(0);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleFileChange}
+        disabled={uploading}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={uploading || !actor}
+        onClick={() => fileInputRef.current?.click()}
+        className="border-border hover:border-primary/60 hover:text-primary whitespace-nowrap"
+        data-ocid="admin.episode.video.upload_button"
+      >
+        {uploading ? (
+          <>
+            <Loader2 size={13} className="mr-1.5 animate-spin" />
+            {progress > 0 ? `${progress}%` : "Uploading..."}
+          </>
+        ) : (
+          <>
+            <Upload size={13} className="mr-1.5" />
+            Upload Video
+          </>
+        )}
+      </Button>
+      {uploading && progress > 0 && (
+        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[60px]">
+          <div
+            className="h-full bg-primary rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -170,7 +265,7 @@ function ShowForm({
         )}
       </div>
 
-      {/* Thumbnail URL */}
+      {/* Thumbnail URL - keep as URL only */}
       <div className="space-y-2">
         <Label>Thumbnail Image URL</Label>
         <Input
@@ -213,6 +308,7 @@ function EpisodeForm({
   initialShowId,
   onSuccess,
 }: { shows: Show[]; initialShowId?: bigint | null; onSuccess: () => void }) {
+  const { actor } = useActor();
   const [showId, setShowId] = useState<bigint | null>(
     initialShowId ?? shows[0]?.id ?? null,
   );
@@ -325,8 +421,8 @@ function EpisodeForm({
           data-ocid="admin.episode.duration.input"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label>Video URL</Label>
+      <div className="space-y-2">
+        <Label>Video</Label>
         <Input
           value={videoUrl}
           onChange={(e) => setVideoUrl(e.target.value)}
@@ -334,8 +430,12 @@ function EpisodeForm({
           className="bg-card border-border"
           data-ocid="admin.episode.video.input"
         />
+        <VideoUploadButton
+          actor={actor as unknown as StorageCertActor | null}
+          onUrl={setVideoUrl}
+        />
         <p className="text-xs text-muted-foreground">
-          Paste a YouTube link, Vimeo link, or direct .mp4 URL.
+          Paste a URL or upload a video file directly.
         </p>
       </div>
       <Button
@@ -369,6 +469,7 @@ function EpisodeEditForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
+  const { actor } = useActor();
   const [season, setSeason] = useState(String(Number(episode.seasonNumber)));
   const [epNum, setEpNum] = useState(String(Number(episode.episodeNumber)));
   const [title, setTitle] = useState(episode.title);
@@ -463,8 +564,8 @@ function EpisodeEditForm({
           data-ocid="admin.episode.edit.duration.input"
         />
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">Video URL</Label>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Video</Label>
         <Input
           value={videoUrl}
           onChange={(e) => setVideoUrl(e.target.value)}
@@ -472,8 +573,12 @@ function EpisodeEditForm({
           className="bg-card border-border h-8 text-sm"
           data-ocid="admin.episode.edit.video.input"
         />
+        <VideoUploadButton
+          actor={actor as unknown as StorageCertActor | null}
+          onUrl={setVideoUrl}
+        />
         <p className="text-xs text-muted-foreground">
-          Paste a YouTube link, Vimeo link, or direct .mp4 URL.
+          Paste a URL or upload a video file directly.
         </p>
       </div>
       <div className="flex gap-2 pt-1">

@@ -3,7 +3,12 @@ import {
   type backendInterface,
   type CreateActorOptions,
 } from "./backend";
+import { StorageClient } from "./utils/StorageClient";
 import { HttpAgent } from "@icp-sdk/core/agent";
+
+const DEFAULT_STORAGE_GATEWAY_URL = "https://blob.caffeine.ai";
+const DEFAULT_BUCKET_NAME = "default-bucket";
+const DEFAULT_PROJECT_ID = "0000000-0000-0000-0000-00000000000";
 
 interface JsonConfig {
   backend_host: string;
@@ -15,6 +20,8 @@ interface JsonConfig {
 interface Config {
   backend_host?: string;
   backend_canister_id: string;
+  storage_gateway_url: string;
+  bucket_name: string;
   project_id: string;
   ii_derivation_origin?: string;
 }
@@ -42,10 +49,12 @@ export async function loadConfig(): Promise<Config> {
       backend_canister_id: (config.backend_canister_id === "undefined"
         ? backendCanisterId
         : config.backend_canister_id) as string,
+      storage_gateway_url: process.env.STORAGE_GATEWAY_URL ?? "nogateway",
+      bucket_name: DEFAULT_BUCKET_NAME,
       project_id:
         config.project_id !== "undefined"
           ? config.project_id
-          : "0000000-0000-0000-0000-00000000000",
+          : DEFAULT_PROJECT_ID,
       ii_derivation_origin:
         config.ii_derivation_origin === "undefined"
           ? undefined
@@ -58,12 +67,15 @@ export async function loadConfig(): Promise<Config> {
       console.error("CANISTER_ID_BACKEND is not set");
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
-    return {
+    const fallbackConfig = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
-      project_id: "0000000-0000-0000-0000-00000000000",
+      storage_gateway_url: DEFAULT_STORAGE_GATEWAY_URL,
+      bucket_name: DEFAULT_BUCKET_NAME,
+      project_id: DEFAULT_PROJECT_ID,
       ii_derivation_origin: undefined,
     };
+    return fallbackConfig;
   }
 }
 
@@ -75,7 +87,9 @@ function extractAgentErrorMessage(error: string): string {
 
 function processError(e: unknown): never {
   if (e && typeof e === "object" && "message" in e) {
-    throw new Error(extractAgentErrorMessage(`${e.message}`));
+    throw new Error(
+      extractAgentErrorMessage(`${(e as { message: unknown }).message}`),
+    );
   }
   throw e;
 }
@@ -84,7 +98,6 @@ async function maybeLoadMockBackend(): Promise<backendInterface | null> {
   if (import.meta.env.VITE_USE_MOCK !== "true") {
     return null;
   }
-
   try {
     const mockModules = import.meta.glob("./mocks/backend.{ts,tsx,js,jsx}");
     const path = Object.keys(mockModules)[0];
@@ -120,10 +133,29 @@ export async function createActorWithConfig(
       console.error(err);
     });
   }
-
-  return createActor(config.backend_canister_id, {
+  const actorOptions = {
     ...resolvedOptions,
-    agent,
+    agent: agent,
     processError,
-  });
+  };
+
+  return createActor(config.backend_canister_id, actorOptions);
+}
+
+// Create a StorageClient for direct video uploads (used in admin panel)
+export async function createStorageClient(
+  actor: {
+    _caffeineStorageCreateCertificate: (
+      hash: string,
+    ) => Promise<{ method: string; blob_hash: string }>;
+  },
+): Promise<StorageClient> {
+  const config = await loadConfig();
+  return new StorageClient(
+    config.bucket_name,
+    config.storage_gateway_url,
+    config.backend_canister_id,
+    config.project_id,
+    actor,
+  );
 }

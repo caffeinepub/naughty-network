@@ -1,6 +1,3 @@
-import { type HttpAgent, isV3ResponseBody } from "@icp-sdk/core/agent";
-import { IDL } from "@icp-sdk/core/candid";
-
 type Headers = Record<string, string>;
 
 const MAXIMUM_CONCURRENT_UPLOADS = 10;
@@ -18,7 +15,7 @@ const DOMAIN_SEPARATOR_FOR_METADATA = new TextEncoder().encode(
 );
 const DOMAIN_SEPARATOR_FOR_NODES = new TextEncoder().encode("ynode/");
 
-// Utility function for exponential backoff retry logic - retries on network/server errors only
+// Utility function for exponential backoff retry logic
 async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
   let lastError: Error | undefined;
 
@@ -27,53 +24,31 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
       return await operation();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-
-      // Check if this error should be retried
       const shouldRetry = isRetriableError(error);
-
-      // On the final attempt or non-retriable error, throw the error
       if (attempt === MAX_RETRIES || !shouldRetry) {
-        if (!shouldRetry && attempt < MAX_RETRIES) {
-          console.warn(
-            `Non-retriable error encountered: ${lastError.message}. Not retrying.`,
-          );
-        }
         throw error;
       }
-
-      // Calculate delay with exponential backoff and jitter
       const delay = Math.min(
         BASE_DELAY_MS * 2 ** attempt + Math.random() * 1000,
         MAX_DELAY_MS,
       );
-
-      console.warn(
-        `Request failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${lastError.message}. Retrying in ${Math.round(delay)}ms...`,
-      );
-
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
-  // This should never happen due to the loop logic, but TypeScript needs it
   throw lastError || new Error("Unknown error occurred during retry attempts");
 }
 
-function isRetriableError(error: any): boolean {
-  const errorMessage = error?.message?.toLowerCase() || "";
-
-  // Don't retry client errors (4xx except specific ones)
-  if (error?.response?.status) {
-    const status = error.response.status;
-    // Only retry these 4xx errors
+function isRetriableError(error: unknown): boolean {
+  const errorMessage =
+    (error as { message?: string })?.message?.toLowerCase() || "";
+  const status = (error as { response?: { status?: number } })?.response
+    ?.status;
+  if (status) {
     if (status === 408 || status === 429) return true;
-    // Don't retry other 4xx client errors
     if (status >= 400 && status < 500) return false;
-    // Retry 5xx server errors
     if (status >= 500) return true;
   }
-
-  // Retry network/SSL errors
   if (
     errorMessage.includes("ssl") ||
     errorMessage.includes("tls") ||
@@ -84,8 +59,6 @@ function isRetriableError(error: any): boolean {
   ) {
     return true;
   }
-
-  // Don't retry validation/logic errors
   if (
     errorMessage.includes("validation") ||
     errorMessage.includes("invalid") ||
@@ -96,34 +69,24 @@ function isRetriableError(error: any): boolean {
   ) {
     return false;
   }
-
-  // Default to retry for unknown errors (conservative approach for network issues)
   return true;
 }
 
-// Hash validation utility
 function validateHashFormat(hash: string, context: string): void {
-  if (!hash) {
-    throw new Error(`${context}: Hash cannot be empty`);
-  }
-
+  if (!hash) throw new Error(`${context}: Hash cannot be empty`);
   if (!hash.startsWith(SHA256_PREFIX)) {
     throw new Error(
-      `${context}: Invalid hash format. Expected format: ${SHA256_PREFIX}<64-char-hex>, got: ${hash}`,
+      `${context}: Invalid hash format. Expected ${SHA256_PREFIX}<64-char-hex>, got: ${hash}`,
     );
   }
-
-  const hexPart = hash.substring(SHA256_PREFIX.length); // Remove 'sha256:' prefix
+  const hexPart = hash.substring(SHA256_PREFIX.length);
   if (hexPart.length !== 64) {
     throw new Error(
-      `${context}: Invalid hash format. Expected 64 hex characters after ${SHA256_PREFIX}, got ${hexPart.length} characters: ${hash}`,
+      `${context}: Expected 64 hex chars after ${SHA256_PREFIX}, got ${hexPart.length}`,
     );
   }
-
   if (!/^[0-9a-f]{64}$/i.test(hexPart)) {
-    throw new Error(
-      `${context}: Invalid hash format. Hash must contain only hex characters (0-9, a-f), got: ${hash}`,
-    );
+    throw new Error(`${context}: Hash must contain only hex characters`);
   }
 }
 
@@ -141,20 +104,19 @@ class YHash {
     left: YHash | null,
     right: YHash | null,
   ): Promise<YHash> {
-    let leftBytes =
+    const leftBytes =
       left instanceof YHash
         ? left.bytes
         : new TextEncoder().encode("UNBALANCED");
-    let rightBytes =
+    const rightBytes =
       right instanceof YHash
         ? right.bytes
         : new TextEncoder().encode("UNBALANCED");
     const combined = new Uint8Array(
       DOMAIN_SEPARATOR_FOR_NODES.length + leftBytes.length + rightBytes.length,
     );
-    const arrays = [DOMAIN_SEPARATOR_FOR_NODES, leftBytes, rightBytes];
     let offset = 0;
-    for (const data of arrays) {
+    for (const data of [DOMAIN_SEPARATOR_FOR_NODES, leftBytes, rightBytes]) {
       combined.set(data, offset);
       offset += data.length;
     }
@@ -167,20 +129,15 @@ class YHash {
   }
 
   static async fromHeaders(headers: Headers): Promise<YHash> {
-    // For each key,value, generate the header line "key: value\n" where the key and value are trimmed.
     const headerLines: string[] = [];
     for (const [key, value] of Object.entries(headers)) {
       headerLines.push(`${key.trim()}: ${value.trim()}\n`);
     }
-    // Sort the header lines alphabetically.
     headerLines.sort();
-
-    // Hash the header lines, with the metadata domain separator.
-    const hash = await YHash.fromBytes(
+    return YHash.fromBytes(
       DOMAIN_SEPARATOR_FOR_METADATA,
       new TextEncoder().encode(headerLines.join("")),
     );
-    return hash;
   }
 
   static async fromBytes(
@@ -257,7 +214,6 @@ class BlobHashTree {
     this.tree_type = "DSBMTWH";
     this.chunk_hashes = chunk_hashes;
     this.tree = tree;
-
     if (headers == null) {
       this.headers = [];
     } else if (Array.isArray(headers)) {
@@ -275,43 +231,30 @@ class BlobHashTree {
     headers: Headers = {},
   ): Promise<BlobHashTree> {
     if (chunkHashes.length === 0) {
-      // To match rust, we have the hash of nothing
       const hex =
         "8b8e620f084e48da0be2287fd12c5aaa4dbe14b468fd2e360f48d741fe7628a0";
       const bytes = new TextEncoder().encode(hex);
       chunkHashes.push(new YHash(bytes));
     }
-
-    // Create leaf nodes for each chunk hash
     let level: TreeNode[] = chunkHashes.map((hash) => ({
       hash,
       left: null,
       right: null,
     }));
-
-    // Build tree bottom-up
     while (level.length > 1) {
       const nextLevel: TreeNode[] = [];
       for (let i = 0; i < level.length; i += 2) {
         const left = level[i];
         const right = level[i + 1] || null;
-
         const parentHash = await YHash.fromNodes(
           left.hash,
           right ? right.hash : null,
         );
-        nextLevel.push({
-          hash: parentHash,
-          left,
-          right,
-        });
+        nextLevel.push({ hash: parentHash, left, right });
       }
       level = nextLevel;
     }
-
     const chunksRoot = level[0];
-
-    // If headers exist and have content, create combined tree
     if (headers && Object.keys(headers).length > 0) {
       const metadataRootHash = await YHash.fromHeaders(headers);
       const metadataRoot: TreeNode = {
@@ -330,7 +273,6 @@ class BlobHashTree {
       };
       return new BlobHashTree(chunkHashes, combinedRoot, headers);
     }
-
     return new BlobHashTree(chunkHashes, chunksRoot, headers);
   }
 
@@ -365,7 +307,6 @@ class StorageGatewayClient {
   public async uploadChunk(
     params: UploadChunkParams,
   ): Promise<{ isComplete: boolean }> {
-    // Validate hash formats before sending to server (validation errors should not be retried)
     const blobHashString = params.blobRootHash.toShaString();
     const chunkHashString = params.chunkHash.toShaString();
     validateHashFormat(
@@ -378,7 +319,6 @@ class StorageGatewayClient {
     );
 
     return await withRetry(async () => {
-      // Use query parameters for metadata and raw bytes in body
       const queryParams = new URLSearchParams({
         owner_id: params.owner,
         blob_hash: blobHashString,
@@ -388,7 +328,6 @@ class StorageGatewayClient {
         project_id: params.projectId,
       });
       const url = `${this.storageGatewayUrl}/${GATEWAY_VERSION}/chunk/?${queryParams.toString()}`;
-
       const response = await fetch(url, {
         method: "PUT",
         headers: {
@@ -397,23 +336,18 @@ class StorageGatewayClient {
         },
         body: params.chunkData as BodyInit,
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         const error = new Error(
           `Failed to upload chunk ${params.chunkIndex}: ${response.status} ${response.statusText} - ${errorText}`,
         );
-        // Add response status for retry logic
-        (error as any).response = { status: response.status };
+        (error as { response?: { status: number } }).response = {
+          status: response.status,
+        };
         throw error;
       }
-
-      const result = (await response.json()) as {
-        status: string;
-      };
-      return {
-        isComplete: result.status === "blob_complete",
-      };
+      const result = (await response.json()) as { status: string };
+      return { isComplete: result.status === "blob_complete" };
     });
   }
 
@@ -423,9 +357,9 @@ class StorageGatewayClient {
     numBlobBytes: number,
     owner: string,
     projectId: string,
-    certificateBytes: Uint8Array,
+    // The certificate result from _caffeineStorageCreateCertificate
+    certResult: { method: string; blob_hash: string },
   ): Promise<void> {
-    // Validate all hashes in the tree before sending to server (validation errors should not be retried)
     const treeJSON = blobHashTree.toJSON();
     validateHashFormat(treeJSON.tree.hash, "uploadBlobTree root hash");
     treeJSON.chunk_hashes.forEach((hash, index) => {
@@ -441,8 +375,12 @@ class StorageGatewayClient {
         owner: owner,
         project_id: projectId,
         headers: blobHashTree.headers,
+        // Use OwnerCanisterMethod with the result from _caffeineStorageCreateCertificate
         auth: {
-          OwnerEgressSignature: Array.from(certificateBytes),
+          OwnerCanisterMethod: {
+            method: certResult.method,
+            blob_hash: certResult.blob_hash,
+          },
         },
       };
 
@@ -460,12 +398,20 @@ class StorageGatewayClient {
         const error = new Error(
           `Failed to upload blob tree: ${response.status} ${response.statusText} - ${errorText}`,
         );
-        // Add response status for retry logic
-        (error as any).response = { status: response.status };
+        (error as { response?: { status: number } }).response = {
+          status: response.status,
+        };
         throw error;
       }
     });
   }
+}
+
+// Actor interface for storage certificate call
+interface StorageActor {
+  _caffeineStorageCreateCertificate(
+    blobHash: string,
+  ): Promise<{ method: string; blob_hash: string }>;
 }
 
 export class StorageClient {
@@ -476,38 +422,28 @@ export class StorageClient {
     storageGatewayUrl: string,
     private readonly backendCanisterId: string,
     private readonly projectId: string,
-    private readonly agent: HttpAgent,
+    private readonly actor: StorageActor,
   ) {
     this.storageGatewayClient = new StorageGatewayClient(storageGatewayUrl);
   }
 
-  private async getCertificate(hash: string): Promise<Uint8Array> {
-    const args = IDL.encode([IDL.Text], [hash]);
-    const result = await this.agent.call(this.backendCanisterId, {
-      methodName: "_caffeineStorageCreateCertificate",
-      arg: args,
-    });
-    const respone = result.response.body;
-    if (isV3ResponseBody(respone)) {
-      console.log("Certificate:", respone.certificate);
-      return respone.certificate;
-    }
-    throw new Error("Expected v3 response body");
+  private async getCertificate(
+    hash: string,
+  ): Promise<{ method: string; blob_hash: string }> {
+    // Call through the backend actor which handles all Candid encoding/decoding
+    return await this.actor._caffeineStorageCreateCertificate(hash);
   }
 
   public async putFile(
     blobBytes: Uint8Array,
     onProgress?: (percentage: number) => void,
   ): Promise<{ hash: string }> {
-    // HTTP headers for fetch requests (used for the PUT request to gateway)
     const httpHeaders: Headers = {
       "Content-Type": "application/json",
     };
-    // Create a Blob from the bytes
     const file = new Blob([new Uint8Array(blobBytes)], {
       type: "application/octet-stream",
     });
-    // File metadata headers that will be stored with the blob tree
     const fileHeaders: Headers = {
       "Content-Type": "application/octet-stream",
       "Content-Length": file.size.toString(),
@@ -518,7 +454,8 @@ export class StorageClient {
     const blobRootHash = blobHashTree.tree.hash;
     const hashString = blobRootHash.toShaString();
 
-    const certificateBytes = await this.getCertificate(hashString);
+    // Get certificate from backend actor (returns { method, blob_hash })
+    const certResult = await this.getCertificate(hashString);
 
     await this.storageGatewayClient.uploadBlobTree(
       blobHashTree,
@@ -526,7 +463,7 @@ export class StorageClient {
       file.size,
       this.backendCanisterId,
       this.projectId,
-      certificateBytes,
+      certResult,
     );
     await this.parallelUpload(
       chunks,
@@ -539,9 +476,7 @@ export class StorageClient {
   }
 
   public async getDirectURL(hash: string): Promise<string> {
-    if (!hash) {
-      throw new Error("Hash must not be empty");
-    }
+    if (!hash) throw new Error("Hash must not be empty");
     validateHashFormat(hash, `getDirectURL for path '${hash}'`);
     return `${this.storageGatewayClient.getStorageGatewayUrl()}/${GATEWAY_VERSION}/blob/?blob_hash=${encodeURIComponent(hash)}&owner_id=${encodeURIComponent(this.backendCanisterId)}&project_id=${encodeURIComponent(this.projectId)}`;
   }
@@ -586,7 +521,6 @@ export class StorageClient {
         projectId: this.projectId,
         httpHeaders,
       });
-      // Use atomic increment to avoid race conditions
       const currentCompleted = ++completedChunks;
       if (onProgress != null) {
         const percentage =
@@ -618,8 +552,7 @@ export class StorageClient {
     for (let index = 0; index < totalChunks; index++) {
       const start = index * chunkSize;
       const end = Math.min(start + chunkSize, file.size);
-      const chunk = file.slice(start, end);
-      chunks.push(chunk);
+      chunks.push(file.slice(start, end));
     }
     return chunks;
   }
