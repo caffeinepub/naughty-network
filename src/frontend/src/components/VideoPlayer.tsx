@@ -1,5 +1,5 @@
 import { Maximize, Pause, Play, Volume2, VolumeX } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface VideoPlayerProps {
   videoUrl?: string;
@@ -45,6 +45,16 @@ export default function VideoPlayer({
 
   const embedUrl = videoUrl ? getEmbedUrl(videoUrl) : null;
   const isEmbed = videoUrl ? isEmbedUrl(videoUrl) : false;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: videoUrl is a prop, not a ref
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    v.load();
+    setPlaying(false);
+    setProgress(0);
+  }, [videoUrl]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -119,6 +129,7 @@ export default function VideoPlayer({
         data-ocid="video.canvas_target"
       >
         <iframe
+          key={embedUrl}
           src={embedUrl}
           title={title ?? "Video"}
           className="w-full h-full"
@@ -137,6 +148,7 @@ export default function VideoPlayer({
     >
       {/* biome-ignore lint/a11y/useMediaCaption: streaming video player */}
       <video
+        key={videoUrl}
         ref={videoRef}
         src={videoUrl}
         poster={posterUrl}

@@ -15,6 +15,7 @@ interface JsonConfig {
 interface Config {
   backend_host?: string;
   backend_canister_id: string;
+  project_id: string;
   ii_derivation_origin?: string;
 }
 
@@ -41,6 +42,10 @@ export async function loadConfig(): Promise<Config> {
       backend_canister_id: (config.backend_canister_id === "undefined"
         ? backendCanisterId
         : config.backend_canister_id) as string,
+      project_id:
+        config.project_id !== "undefined"
+          ? config.project_id
+          : "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin:
         config.ii_derivation_origin === "undefined"
           ? undefined
@@ -56,6 +61,7 @@ export async function loadConfig(): Promise<Config> {
     const fallbackConfig = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
+      project_id: "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin: undefined,
     };
     return fallbackConfig;
@@ -115,7 +121,7 @@ export async function createActorWithConfig(
       console.error(err);
     });
   }
-  const actorOptions = {
+  const actorOptions: CreateActorOptions = {
     ...resolvedOptions,
     agent: agent,
     processError,
