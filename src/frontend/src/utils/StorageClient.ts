@@ -1,3 +1,6 @@
+import { type HttpAgent, isV3ResponseBody } from "@icp-sdk/core/agent";
+import { IDL } from "@icp-sdk/core/candid";
+
 type Headers = Record<string, string>;
 
 const MAXIMUM_CONCURRENT_UPLOADS = 10;
@@ -420,7 +423,7 @@ class StorageGatewayClient {
     numBlobBytes: number,
     owner: string,
     projectId: string,
-    cert: { method: string; blob_hash: string },
+    certificateBytes: Uint8Array,
   ): Promise<void> {
     // Validate all hashes in the tree before sending to server (validation errors should not be retried)
     const treeJSON = blobHashTree.toJSON();
@@ -439,10 +442,7 @@ class StorageGatewayClient {
         project_id: projectId,
         headers: blobHashTree.headers,
         auth: {
-          OwnerCanisterMethod: {
-            method: cert.method,
-            blob_hash: cert.blob_hash,
-          },
+          OwnerEgressSignature: Array.from(certificateBytes),
         },
       };
 
@@ -476,17 +476,23 @@ export class StorageClient {
     storageGatewayUrl: string,
     private readonly backendCanisterId: string,
     private readonly projectId: string,
-    private readonly certCallback: (
-      blobHash: string,
-    ) => Promise<{ method: string; blob_hash: string }>,
+    private readonly agent: HttpAgent,
   ) {
     this.storageGatewayClient = new StorageGatewayClient(storageGatewayUrl);
   }
 
-  private async getCertificate(
-    hash: string,
-  ): Promise<{ method: string; blob_hash: string }> {
-    return this.certCallback(hash);
+  private async getCertificate(hash: string): Promise<Uint8Array> {
+    const args = IDL.encode([IDL.Text], [hash]);
+    const result = await this.agent.call(this.backendCanisterId, {
+      methodName: "_caffeineStorageCreateCertificate",
+      arg: args,
+    });
+    const respone = result.response.body;
+    if (isV3ResponseBody(respone)) {
+      console.log("Certificate:", respone.certificate);
+      return respone.certificate;
+    }
+    throw new Error("Expected v3 response body");
   }
 
   public async putFile(
@@ -512,7 +518,7 @@ export class StorageClient {
     const blobRootHash = blobHashTree.tree.hash;
     const hashString = blobRootHash.toShaString();
 
-    const cert = await this.getCertificate(hashString);
+    const certificateBytes = await this.getCertificate(hashString);
 
     await this.storageGatewayClient.uploadBlobTree(
       blobHashTree,
@@ -520,7 +526,7 @@ export class StorageClient {
       file.size,
       this.backendCanisterId,
       this.projectId,
-      cert,
+      certificateBytes,
     );
     await this.parallelUpload(
       chunks,

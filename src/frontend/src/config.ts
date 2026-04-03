@@ -3,12 +3,7 @@ import {
   type backendInterface,
   type CreateActorOptions,
 } from "./backend";
-import { StorageClient } from "./utils/StorageClient";
 import { HttpAgent } from "@icp-sdk/core/agent";
-
-const DEFAULT_STORAGE_GATEWAY_URL = "https://blob.caffeine.ai";
-const DEFAULT_BUCKET_NAME = "default-bucket";
-const DEFAULT_PROJECT_ID = "0000000-0000-0000-0000-00000000000";
 
 interface JsonConfig {
   backend_host: string;
@@ -20,9 +15,6 @@ interface JsonConfig {
 interface Config {
   backend_host?: string;
   backend_canister_id: string;
-  storage_gateway_url: string;
-  bucket_name: string;
-  project_id: string;
   ii_derivation_origin?: string;
 }
 
@@ -49,12 +41,6 @@ export async function loadConfig(): Promise<Config> {
       backend_canister_id: (config.backend_canister_id === "undefined"
         ? backendCanisterId
         : config.backend_canister_id) as string,
-      storage_gateway_url: process.env.STORAGE_GATEWAY_URL ?? "nogateway",
-      bucket_name: DEFAULT_BUCKET_NAME,
-      project_id:
-        config.project_id !== "undefined"
-          ? config.project_id
-          : DEFAULT_PROJECT_ID,
       ii_derivation_origin:
         config.ii_derivation_origin === "undefined"
           ? undefined
@@ -70,9 +56,6 @@ export async function loadConfig(): Promise<Config> {
     const fallbackConfig = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
-      storage_gateway_url: DEFAULT_STORAGE_GATEWAY_URL,
-      bucket_name: DEFAULT_BUCKET_NAME,
-      project_id: DEFAULT_PROJECT_ID,
       ii_derivation_origin: undefined,
     };
     return fallbackConfig;
@@ -98,17 +81,12 @@ async function maybeLoadMockBackend(): Promise<backendInterface | null> {
   }
 
   try {
-    // If VITE_USE_MOCK is enabled, try to load a mock backend module *if it exists*.
-    // We use import.meta.glob so builds don't fail when the mock file is absent.
     const mockModules = import.meta.glob("./mocks/backend.{ts,tsx,js,jsx}");
-
     const path = Object.keys(mockModules)[0];
     if (!path) return null;
-
     const mod = (await mockModules[path]()) as {
       mockBackend?: backendInterface;
     };
-
     return mod.mockBackend ?? null;
   } catch {
     return null;
@@ -118,7 +96,6 @@ async function maybeLoadMockBackend(): Promise<backendInterface | null> {
 export async function createActorWithConfig(
   options?: CreateActorOptions,
 ): Promise<backendInterface> {
-  // Attempt to load mock backend if enabled
   const mock = await maybeLoadMockBackend();
   if (mock) {
     return mock;
@@ -144,30 +121,5 @@ export async function createActorWithConfig(
     processError,
   };
 
-  const actor = createActor(
-    config.backend_canister_id,
-    actorOptions,
-  );
-
-  return actor;
-}
-
-export async function createStorageClientWithConfig(
-  actor: backendInterface,
-  options?: CreateActorOptions,
-): Promise<StorageClient> {
-  const config = await loadConfig();
-
-  const certCallback = async (blobHash: string): Promise<{ method: string; blob_hash: string }> => {
-    const result = await (actor as any)._caffeineStorageCreateCertificate(blobHash);
-    return result as { method: string; blob_hash: string };
-  };
-
-  return new StorageClient(
-    config.bucket_name,
-    config.storage_gateway_url,
-    config.backend_canister_id,
-    config.project_id,
-    certCallback,
-  );
+  return createActor(config.backend_canister_id, actorOptions);
 }

@@ -2,7 +2,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,23 +16,13 @@ import {
   Lock,
   Plus,
   Trash2,
-  Upload,
   Users,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import type { Episode, Show } from "../backend";
-import { createStorageClientWithConfig } from "../config";
-import { useStorageClient } from "../hooks/useQueries";
-
-type UserRecord = {
-  principal: { toString(): string };
-  name: string;
-  joinedAt: bigint;
-};
-
 import {
   useAllShows,
   useAllUsers,
@@ -46,84 +35,11 @@ import {
   useUpdateShow,
 } from "../hooks/useQueries";
 
-function VideoUploadButton({
-  onUploaded,
-  actor,
-}: {
-  onUploaded: (url: string) => void;
-  actor: any;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const MAX_SIZE = 500 * 1024 * 1024; // 500MB
-    if (file.size > MAX_SIZE) {
-      toast.error("File too large. Maximum size is 500MB.");
-      return;
-    }
-
-    setUploading(true);
-    setProgress(0);
-    try {
-      const storageClient = await createStorageClientWithConfig(actor);
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const { hash } = await storageClient.putFile(bytes, (pct) => {
-        setProgress(pct);
-      });
-      const directUrl = await storageClient.getDirectURL(hash);
-      onUploaded(directUrl);
-      toast.success("Video uploaded successfully!");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Upload failed: ${msg.slice(0, 120)}`);
-    } finally {
-      setUploading(false);
-      setProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={uploading || !actor}
-        onClick={() => fileInputRef.current?.click()}
-        className="border-border text-sm"
-      >
-        {uploading ? (
-          <>
-            <Loader2 size={13} className="mr-2 animate-spin" /> Uploading...
-          </>
-        ) : (
-          <>
-            <Upload size={13} className="mr-2" /> Upload Video File
-          </>
-        )}
-      </Button>
-      {uploading && (
-        <div className="space-y-1">
-          <Progress value={progress} className="h-1.5" />
-          <p className="text-xs text-muted-foreground">{progress}% uploaded</p>
-        </div>
-      )}
-    </div>
-  );
-}
+type UserRecord = {
+  principal: { toString(): string };
+  name: string;
+  joinedAt: bigint;
+};
 
 function ThumbnailPreview({ url }: { url: string }) {
   const [error, setError] = useState(false);
@@ -307,7 +223,6 @@ function EpisodeForm({
   const [duration, setDuration] = useState("0");
   const [videoUrl, setVideoUrl] = useState("");
   const createMutation = useCreateEpisode();
-  const { actor } = useStorageClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -419,13 +334,8 @@ function EpisodeForm({
           className="bg-card border-border"
           data-ocid="admin.episode.video.input"
         />
-        <VideoUploadButton
-          onUploaded={(url) => setVideoUrl(url)}
-          actor={actor}
-        />
         <p className="text-xs text-muted-foreground">
-          Paste a YouTube link, Vimeo link, or direct .mp4 URL — or upload a
-          video file directly.
+          Paste a YouTube link, Vimeo link, or direct .mp4 URL.
         </p>
       </div>
       <Button
@@ -468,7 +378,6 @@ function EpisodeEditForm({
   );
   const [videoUrl, setVideoUrl] = useState(episode.videoUrl ?? "");
   const updateMutation = useUpdateEpisode();
-  const { actor } = useStorageClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -563,12 +472,8 @@ function EpisodeEditForm({
           className="bg-card border-border h-8 text-sm"
           data-ocid="admin.episode.edit.video.input"
         />
-        <VideoUploadButton
-          onUploaded={(url) => setVideoUrl(url)}
-          actor={actor}
-        />
         <p className="text-xs text-muted-foreground">
-          Or upload a video file directly.
+          Paste a YouTube link, Vimeo link, or direct .mp4 URL.
         </p>
       </div>
       <div className="flex gap-2 pt-1">
