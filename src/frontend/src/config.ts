@@ -2,7 +2,6 @@ import {
   createActor,
   type backendInterface,
   type CreateActorOptions,
-  ExternalBlob,
 } from "./backend";
 import { StorageClient } from "./utils/StorageClient";
 import { HttpAgent } from "@icp-sdk/core/agent";
@@ -145,50 +144,30 @@ export async function createActorWithConfig(
     processError,
   };
 
-  // Use a lazy actor reference so StorageClient can call _caffeineStorageCreateCertificate
-  // through the actor (with proper Candid decoding) even though the actor is created after
-  // StorageClient is set up.
-  let actorRef: backendInterface | null = null;
+  const actor = createActor(
+    config.backend_canister_id,
+    actorOptions,
+  );
 
-  const storageClient = new StorageClient(
+  return actor;
+}
+
+export async function createStorageClientWithConfig(
+  actor: backendInterface,
+  options?: CreateActorOptions,
+): Promise<StorageClient> {
+  const config = await loadConfig();
+
+  const certCallback = async (blobHash: string): Promise<{ method: string; blob_hash: string }> => {
+    const result = await (actor as any)._caffeineStorageCreateCertificate(blobHash);
+    return result as { method: string; blob_hash: string };
+  };
+
+  return new StorageClient(
     config.bucket_name,
     config.storage_gateway_url,
     config.backend_canister_id,
     config.project_id,
-    async (hash: string) => {
-      if (!actorRef) throw new Error("Actor not initialized");
-      // Calls the canister method through the Actor system (proper Candid decoding).
-      // Returns { method, blob_hash } which is sent to the gateway as OwnerCanisterMethod.
-      return actorRef._caffeineStorageCreateCertificate(hash);
-    },
+    certCallback,
   );
-
-  const MOTOKO_DEDUPLICATION_SENTINEL = "!caf!";
-
-  const uploadFile = async (file: ExternalBlob): Promise<Uint8Array> => {
-    const { hash } = await storageClient.putFile(
-      await file.getBytes(),
-      file.onProgress,
-    );
-    return new TextEncoder().encode(MOTOKO_DEDUPLICATION_SENTINEL + hash);
-  };
-
-  const downloadFile = async (bytes: Uint8Array): Promise<ExternalBlob> => {
-    const hashWithPrefix = new TextDecoder().decode(new Uint8Array(bytes));
-    const hash = hashWithPrefix.substring(MOTOKO_DEDUPLICATION_SENTINEL.length);
-    const url = await storageClient.getDirectURL(hash);
-    return ExternalBlob.fromURL(url);
-  };
-
-  const actor = createActor(
-    config.backend_canister_id,
-    uploadFile,
-    downloadFile,
-    actorOptions,
-  );
-
-  // Assign the actor reference so the storageClient callback can use it
-  actorRef = actor;
-
-  return actor;
 }

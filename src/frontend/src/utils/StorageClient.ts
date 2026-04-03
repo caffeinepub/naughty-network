@@ -420,7 +420,7 @@ class StorageGatewayClient {
     numBlobBytes: number,
     owner: string,
     projectId: string,
-    ownerCanisterMethod: { method: string; blob_hash: string },
+    cert: { method: string; blob_hash: string },
   ): Promise<void> {
     // Validate all hashes in the tree before sending to server (validation errors should not be retried)
     const treeJSON = blobHashTree.toJSON();
@@ -439,7 +439,10 @@ class StorageGatewayClient {
         project_id: projectId,
         headers: blobHashTree.headers,
         auth: {
-          OwnerCanisterMethod: ownerCanisterMethod,
+          OwnerCanisterMethod: {
+            method: cert.method,
+            blob_hash: cert.blob_hash,
+          },
         },
       };
 
@@ -473,11 +476,17 @@ export class StorageClient {
     storageGatewayUrl: string,
     private readonly backendCanisterId: string,
     private readonly projectId: string,
-    private readonly createCertificate: (
-      hash: string,
+    private readonly certCallback: (
+      blobHash: string,
     ) => Promise<{ method: string; blob_hash: string }>,
   ) {
     this.storageGatewayClient = new StorageGatewayClient(storageGatewayUrl);
+  }
+
+  private async getCertificate(
+    hash: string,
+  ): Promise<{ method: string; blob_hash: string }> {
+    return this.certCallback(hash);
   }
 
   public async putFile(
@@ -503,10 +512,7 @@ export class StorageClient {
     const blobRootHash = blobHashTree.tree.hash;
     const hashString = blobRootHash.toShaString();
 
-    // Call the backend actor method via the provided callback.
-    // This uses proper Candid decoding and returns { method, blob_hash }
-    // which is exactly what the storage gateway expects as OwnerCanisterMethod auth.
-    const ownerCanisterMethod = await this.createCertificate(hashString);
+    const cert = await this.getCertificate(hashString);
 
     await this.storageGatewayClient.uploadBlobTree(
       blobHashTree,
@@ -514,7 +520,7 @@ export class StorageClient {
       file.size,
       this.backendCanisterId,
       this.projectId,
-      ownerCanisterMethod,
+      cert,
     );
     await this.parallelUpload(
       chunks,

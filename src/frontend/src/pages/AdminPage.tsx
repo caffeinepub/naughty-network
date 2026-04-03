@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,15 +22,18 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { ExternalBlob } from "../backend";
 import type { Episode, Show } from "../backend";
+import { createStorageClientWithConfig } from "../config";
+import { useStorageClient } from "../hooks/useQueries";
+
 type UserRecord = {
   principal: { toString(): string };
   name: string;
   joinedAt: bigint;
 };
+
 import {
   useAllShows,
   useAllUsers,
@@ -42,77 +46,95 @@ import {
   useUpdateShow,
 } from "../hooks/useQueries";
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function FilePickerButton({
-  accept,
-  file,
-  onFile,
-  label,
-  ocid,
+function VideoUploadButton({
+  onUploaded,
+  actor,
 }: {
-  accept: string;
-  file: File | null;
-  onFile: (f: File | null) => void;
-  label: string;
-  ocid: string;
+  onUploaded: (url: string) => void;
+  actor: any;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const MAX_SIZE = 500 * 1024 * 1024; // 500MB
+    if (file.size > MAX_SIZE) {
+      toast.error("File too large. Maximum size is 500MB.");
+      return;
+    }
+
+    setUploading(true);
+    setProgress(0);
+    try {
+      const storageClient = await createStorageClientWithConfig(actor);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const { hash } = await storageClient.putFile(bytes, (pct) => {
+        setProgress(pct);
+      });
+      const directUrl = await storageClient.getDirectURL(hash);
+      onUploaded(directUrl);
+      toast.success("Video uploaded successfully!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Upload failed: ${msg.slice(0, 120)}`);
+    } finally {
+      setUploading(false);
+      setProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
-    <div className="space-y-1.5">
-      <label className="flex items-center gap-3 cursor-pointer">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="border-border flex-shrink-0"
-          asChild
-          data-ocid={ocid}
-        >
-          <span>
-            <Upload size={14} className="mr-1.5" />
-            {label}
-          </span>
-        </Button>
-        <input
-          type="file"
-          accept={accept}
-          className="hidden"
-          onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-        />
-        {file && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              onFile(null);
-            }}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X size={14} />
-          </button>
+    <div className="space-y-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={uploading || !actor}
+        onClick={() => fileInputRef.current?.click()}
+        className="border-border text-sm"
+      >
+        {uploading ? (
+          <>
+            <Loader2 size={13} className="mr-2 animate-spin" /> Uploading...
+          </>
+        ) : (
+          <>
+            <Upload size={13} className="mr-2" /> Upload Video File
+          </>
         )}
-      </label>
-      {file && (
-        <p className="text-xs text-muted-foreground pl-1">
-          <span className="font-medium text-foreground/80">{file.name}</span>
-          {" · "}
-          {formatFileSize(file.size)}
-        </p>
+      </Button>
+      {uploading && (
+        <div className="space-y-1">
+          <Progress value={progress} className="h-1.5" />
+          <p className="text-xs text-muted-foreground">{progress}% uploaded</p>
+        </div>
       )}
     </div>
   );
 }
 
-function UploadProgress({ progress }: { progress: number }) {
-  if (progress <= 0 || progress >= 100) return null;
+function ThumbnailPreview({ url }: { url: string }) {
+  const [error, setError] = useState(false);
+  if (!url || error) return null;
   return (
-    <div className="w-full bg-border rounded h-1.5">
-      <div
-        className="bg-primary h-full rounded transition-all"
-        style={{ width: `${progress}%` }}
+    <div className="w-32 aspect-video rounded overflow-hidden border border-border">
+      <img
+        src={url}
+        alt="Thumbnail preview"
+        className="w-full h-full object-cover"
+        onError={() => setError(true)}
       />
     </div>
   );
@@ -127,8 +149,9 @@ function ShowForm({
   const [genre, setGenre] = useState(existing?.genre ?? "");
   const [isPublic, setIsPublic] = useState(existing?.isPublic ?? true);
   const [isFeatured, setIsFeatured] = useState(existing?.isFeatured ?? false);
-  const [thumbFile, setThumbFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [thumbnailUrl, setThumbnailUrl] = useState(
+    existing?.thumbnailUrl ?? "",
+  );
 
   const createMutation = useCreateShow();
   const updateMutation = useUpdateShow();
@@ -136,22 +159,13 @@ function ShowForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let thumbnailBlob: ExternalBlob | null = null;
-      if (thumbFile) {
-        const bytes = new Uint8Array(await thumbFile.arrayBuffer());
-        thumbnailBlob = ExternalBlob.fromBytes(bytes).withUploadProgress((p) =>
-          setUploadProgress(p),
-        );
-      } else if (existing?.thumbnailBlob) {
-        thumbnailBlob = existing.thumbnailBlob; // preserve existing
-      }
       if (existing) {
         await updateMutation.mutateAsync({
           id: existing.id,
           title,
           description,
           genre,
-          thumbnailBlob,
+          thumbnailUrl,
           isFeatured,
           isPublic,
         });
@@ -161,7 +175,7 @@ function ShowForm({
           title,
           description,
           genre,
-          thumbnailBlob,
+          thumbnailUrl,
           isPublic,
         });
         toast.success("Show created!");
@@ -169,13 +183,11 @@ function ShowForm({
       onSuccess();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("Upload error:", err);
       toast.error(`Failed to save: ${msg.slice(0, 120)}`);
     }
   };
 
   const isPending = createMutation.isPending || updateMutation.isPending;
-  const existingThumbURL = existing?.thumbnailBlob?.getDirectURL();
 
   return (
     <form
@@ -242,41 +254,21 @@ function ShowForm({
         )}
       </div>
 
-      {/* Thumbnail */}
+      {/* Thumbnail URL */}
       <div className="space-y-2">
-        <Label>Thumbnail</Label>
-        {existingThumbURL && !thumbFile && (
-          <div className="w-24 aspect-video rounded overflow-hidden border border-border mb-2">
-            <img
-              src={existingThumbURL}
-              alt="Current thumbnail"
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-        {thumbFile && (
-          <div className="w-24 aspect-video rounded overflow-hidden border border-border mb-2">
-            <img
-              src={URL.createObjectURL(thumbFile)}
-              alt="New thumbnail preview"
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-        <FilePickerButton
-          accept="image/*"
-          file={thumbFile}
-          onFile={setThumbFile}
-          label={
-            thumbFile
-              ? "Change image"
-              : existing
-                ? "Replace image"
-                : "Choose image"
-          }
-          ocid="admin.show.thumbnail.upload_button"
+        <Label>Thumbnail Image URL</Label>
+        <Input
+          value={thumbnailUrl}
+          onChange={(e) => setThumbnailUrl(e.target.value)}
+          placeholder="https://example.com/image.jpg"
+          className="bg-card border-border"
+          data-ocid="admin.show.thumbnail.input"
         />
-        <UploadProgress progress={uploadProgress} />
+        <ThumbnailPreview url={thumbnailUrl} />
+        <p className="text-xs text-muted-foreground">
+          Paste a direct image URL. You can host images for free on imgbb.com or
+          cloudinary.com.
+        </p>
       </div>
 
       <Button
@@ -313,35 +305,27 @@ function EpisodeForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("0");
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [videoUrl, setVideoUrl] = useState("");
   const createMutation = useCreateEpisode();
+  const { actor } = useStorageClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showId) return;
     try {
-      let videoBlob: ExternalBlob | null = null;
-      if (videoFile) {
-        const bytes = new Uint8Array(await videoFile.arrayBuffer());
-        videoBlob = ExternalBlob.fromBytes(bytes).withUploadProgress((p) =>
-          setUploadProgress(p),
-        );
-      }
       await createMutation.mutateAsync({
         showId,
         seasonNumber: BigInt(season),
         episodeNumber: BigInt(episode),
         title,
         description,
-        videoBlob,
+        videoUrl,
         duration: BigInt(Math.round(Number(duration) * 60)),
       });
       toast.success("Episode created!");
       onSuccess();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("Upload error:", err);
       toast.error(`Failed to save: ${msg.slice(0, 120)}`);
     }
   };
@@ -427,15 +411,22 @@ function EpisodeForm({
         />
       </div>
       <div className="space-y-1.5">
-        <Label>Video File</Label>
-        <FilePickerButton
-          accept="video/*"
-          file={videoFile}
-          onFile={setVideoFile}
-          label={videoFile ? "Change video" : "Choose video"}
-          ocid="admin.episode.video.upload_button"
+        <Label>Video URL</Label>
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="YouTube, Vimeo, or direct .mp4 URL"
+          className="bg-card border-border"
+          data-ocid="admin.episode.video.input"
         />
-        <UploadProgress progress={uploadProgress} />
+        <VideoUploadButton
+          onUploaded={(url) => setVideoUrl(url)}
+          actor={actor}
+        />
+        <p className="text-xs text-muted-foreground">
+          Paste a YouTube link, Vimeo link, or direct .mp4 URL — or upload a
+          video file directly.
+        </p>
       </div>
       <Button
         type="submit"
@@ -475,22 +466,13 @@ function EpisodeEditForm({
   const [duration, setDuration] = useState(
     String(Math.round(Number(episode.duration) / 60)),
   );
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [videoUrl, setVideoUrl] = useState(episode.videoUrl ?? "");
   const updateMutation = useUpdateEpisode();
+  const { actor } = useStorageClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let videoBlob: ExternalBlob | null = null;
-      if (videoFile) {
-        const bytes = new Uint8Array(await videoFile.arrayBuffer());
-        videoBlob = ExternalBlob.fromBytes(bytes).withUploadProgress((p) =>
-          setUploadProgress(p),
-        );
-      } else if (episode.videoBlob) {
-        videoBlob = episode.videoBlob; // preserve existing
-      }
       await updateMutation.mutateAsync({
         id: episode.id,
         showId,
@@ -498,14 +480,13 @@ function EpisodeEditForm({
         episodeNumber: BigInt(epNum),
         title,
         description,
-        videoBlob,
+        videoUrl,
         duration: BigInt(Math.round(Number(duration) * 60)),
       });
       toast.success("Episode updated!");
       onSuccess();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("Upload error:", err);
       toast.error(`Failed to save: ${msg.slice(0, 120)}`);
     }
   };
@@ -574,15 +555,21 @@ function EpisodeEditForm({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Replace Video (optional)</Label>
-        <FilePickerButton
-          accept="video/*"
-          file={videoFile}
-          onFile={setVideoFile}
-          label={videoFile ? "Change video" : "Upload new video"}
-          ocid="admin.episode.edit.video.upload_button"
+        <Label className="text-xs">Video URL</Label>
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="YouTube, Vimeo, or direct .mp4 URL"
+          className="bg-card border-border h-8 text-sm"
+          data-ocid="admin.episode.edit.video.input"
         />
-        <UploadProgress progress={uploadProgress} />
+        <VideoUploadButton
+          onUploaded={(url) => setVideoUrl(url)}
+          actor={actor}
+        />
+        <p className="text-xs text-muted-foreground">
+          Or upload a video file directly.
+        </p>
       </div>
       <div className="flex gap-2 pt-1">
         <Button
@@ -684,6 +671,11 @@ function SeasonSection({
                         )}
                         <p className="text-xs text-muted-foreground/60 mt-0.5">
                           {Math.round(Number(ep.duration) / 60)} min
+                          {ep.videoUrl && (
+                            <span className="ml-2 text-green-400/70">
+                              • Video linked
+                            </span>
+                          )}
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -852,7 +844,6 @@ export default function AdminPage() {
       toast.success("Show deleted.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("Delete show error:", err);
       toast.error(`Failed to delete: ${msg.slice(0, 120)}`);
     }
   };
@@ -867,7 +858,6 @@ export default function AdminPage() {
       toast.success("Episode deleted.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("Delete episode error:", err);
       toast.error(`Failed to delete: ${msg.slice(0, 120)}`);
     }
   };
@@ -879,7 +869,6 @@ export default function AdminPage() {
     setActiveTab("episodes");
   };
 
-  // Group episodes by season
   const episodesBySeason = episodes.reduce(
     (acc, ep) => {
       const sn = Number(ep.seasonNumber);
@@ -1002,7 +991,7 @@ export default function AdminPage() {
                     <div className="w-16 aspect-video bg-black/40 rounded overflow-hidden flex-shrink-0">
                       <img
                         src={
-                          show.thumbnailBlob?.getDirectURL() ??
+                          show.thumbnailUrl ||
                           `https://picsum.photos/seed/${encodeURIComponent(show.title)}/160/90`
                         }
                         alt={show.title}
@@ -1027,12 +1016,6 @@ export default function AdminPage() {
                         {show.isFeatured && (
                           <Badge className="text-xs bg-primary/20 text-primary border border-primary/30">
                             Featured
-                          </Badge>
-                        )}
-                        {selectedShowId === show.id && episodes.length > 0 && (
-                          <Badge className="text-xs bg-white/10 text-white/70 border border-white/20">
-                            {episodes.length} ep
-                            {episodes.length !== 1 ? "s" : ""}
                           </Badge>
                         )}
                       </div>
@@ -1128,7 +1111,6 @@ export default function AdminPage() {
               )}
             </AnimatePresence>
 
-            {/* Show selector */}
             <div className="mb-6">
               <Label className="mb-2 block">View episodes for show:</Label>
               <select

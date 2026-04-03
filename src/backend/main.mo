@@ -2,7 +2,6 @@ import Nat "mo:core/Nat";
 import Text "mo:core/Text";
 import Int "mo:core/Int";
 import Principal "mo:core/Principal";
-import Array "mo:core/Array";
 import List "mo:core/List";
 import Time "mo:core/Time";
 import Map "mo:core/Map";
@@ -11,13 +10,8 @@ import Order "mo:core/Order";
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
-import MixinStorage "blob-storage/Mixin";
-import Storage "blob-storage/Storage";
 
 actor {
-  // Mixin support
-  include MixinStorage();
-
   type UserRole = AccessControl.UserRole;
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -36,7 +30,40 @@ actor {
   let userProfiles = Map.empty<Principal, UserProfile>();
   let userJoinedAt = Map.empty<Principal, Int>();
 
-  // Types
+  // ── Old types (for migration from blob-based storage) ──────────────────────
+  // The previous version stored these types in stable maps named `shows` and `episodes`.
+  // We keep those same variable names with the OLD types so the runtime can deserialise
+  // existing stable memory without a compatibility error. Then in postupgrade we migrate
+  // all entries into the new `showsV2` / `episodesV2` maps and clear the old maps.
+  type OldShow = {
+    id : Nat;
+    title : Text;
+    description : Text;
+    genre : Text;
+    thumbnailBlob : ?Blob;
+    isFeatured : Bool;
+    isPublic : Bool;
+    creatorId : Principal;
+    createdAt : Int;
+  };
+
+  type OldEpisode = {
+    id : Nat;
+    showId : Nat;
+    seasonNumber : Nat;
+    episodeNumber : Nat;
+    title : Text;
+    description : Text;
+    videoBlob : ?Blob;
+    duration : Nat;
+    createdAt : Int;
+  };
+
+  // Old stable maps -- same names as before so deserialization succeeds
+  let shows = Map.empty<Nat, OldShow>();
+  let episodes = Map.empty<Nat, OldEpisode>();
+
+  // ── New types ───────────────────────────────────────────────────────────────
   module Show {
     public type Id = Nat;
 
@@ -45,7 +72,7 @@ actor {
       title : Text;
       description : Text;
       genre : Text;
-      thumbnailBlob : ?Storage.ExternalBlob;
+      thumbnailUrl : Text;
       isFeatured : Bool;
       isPublic : Bool;
       creatorId : Principal;
@@ -67,7 +94,7 @@ actor {
       episodeNumber : Nat;
       title : Text;
       description : Text;
-      videoBlob : ?Storage.ExternalBlob;
+      videoUrl : Text;
       duration : Nat;
       createdAt : Int;
     };
@@ -91,7 +118,7 @@ actor {
 
   type WatchProgress = EpisodeProgress.EpisodeProgress;
 
-  // Storage
+  // Storage counters
   var nextShowId = 1;
   var nextEpisodeId = 1;
 
@@ -106,10 +133,53 @@ actor {
     };
   };
 
-  let shows = Map.empty<Show.Id, Show.Show>();
-  let episodes = Map.empty<Episode.Id, Episode.Episode>();
+  // New URL-based stable maps (v2)
+  let showsV2 = Map.empty<Show.Id, Show.Show>();
+  let episodesV2 = Map.empty<Episode.Id, Episode.Episode>();
   let watchlists = Map.empty<Principal, List.List<WatchlistEntry.WatchlistEntry>>();
   let progress = Map.empty<Principal, List.List<WatchProgress>>();
+
+  // Migration: on upgrade, copy old blob-based records into new URL-based maps
+  system func postupgrade() {
+    for ((id, old) in shows.entries()) {
+      let migrated : Show.Show = {
+        id = old.id;
+        title = old.title;
+        description = old.description;
+        genre = old.genre;
+        thumbnailUrl = "";
+        isFeatured = old.isFeatured;
+        isPublic = old.isPublic;
+        creatorId = old.creatorId;
+        createdAt = old.createdAt;
+      };
+      showsV2.add(id, migrated);
+      // Keep nextShowId in sync
+      if (old.id >= nextShowId) {
+        nextShowId := old.id + 1;
+      };
+    };
+    shows.clear();
+
+    for ((id, old) in episodes.entries()) {
+      let migrated : Episode.Episode = {
+        id = old.id;
+        showId = old.showId;
+        seasonNumber = old.seasonNumber;
+        episodeNumber = old.episodeNumber;
+        title = old.title;
+        description = old.description;
+        videoUrl = "";
+        duration = old.duration;
+        createdAt = old.createdAt;
+      };
+      episodesV2.add(id, migrated);
+      if (old.id >= nextEpisodeId) {
+        nextEpisodeId := old.id + 1;
+      };
+    };
+    episodes.clear();
+  };
 
   // User Profile Functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
@@ -130,7 +200,6 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
-    // Track join time on first save
     switch (userJoinedAt.get(caller)) {
       case (null) { userJoinedAt.add(caller, Time.now()) };
       case (?_) {};
@@ -155,8 +224,8 @@ actor {
     results.toArray();
   };
 
-  // Shows — no auth required, frontend password gate handles access control
-  public shared ({ caller }) func createShow(title : Text, description : Text, genre : Text, thumbnailBlob : ?Storage.ExternalBlob, isPublic : Bool) : async Show.Show {
+  // Shows
+  public shared ({ caller }) func createShow(title : Text, description : Text, genre : Text, thumbnailUrl : Text, isPublic : Bool) : async Show.Show {
     let id = nextShowId;
     nextShowId += 1;
     let show : Show.Show = {
@@ -164,18 +233,18 @@ actor {
       title;
       description;
       genre;
-      thumbnailBlob;
+      thumbnailUrl;
       isFeatured = false;
       isPublic;
       creatorId = caller;
       createdAt = Time.now();
     };
-    shows.add(id, show);
+    showsV2.add(id, show);
     show;
   };
 
-  public shared ({ caller }) func updateShow(showId : Show.Id, title : Text, description : Text, genre : Text, thumbnailBlob : ?Storage.ExternalBlob, isFeatured : Bool, isPublic : Bool) : async () {
-    switch (shows.get(showId)) {
+  public shared ({ caller }) func updateShow(showId : Show.Id, title : Text, description : Text, genre : Text, thumbnailUrl : Text, isFeatured : Bool, isPublic : Bool) : async () {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?existingShow) {
         let updatedShow : Show.Show = {
@@ -183,38 +252,37 @@ actor {
           title;
           description;
           genre;
-          thumbnailBlob;
+          thumbnailUrl;
           isFeatured;
           isPublic;
           creatorId = existingShow.creatorId;
           createdAt = existingShow.createdAt;
         };
-        shows.add(showId, updatedShow);
+        showsV2.add(showId, updatedShow);
       };
     };
   };
 
   public shared ({ caller }) func deleteShow(showId : Show.Id) : async () {
-    switch (shows.get(showId)) {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
-      case (?show) {
-        shows.remove(showId);
-        // Delete episodes
+      case (?_show) {
+        showsV2.remove(showId);
         let episodeIdsToDelete = List.empty<Episode.Id>();
-        for ((episodeId, episode) in episodes.entries()) {
+        for ((episodeId, episode) in episodesV2.entries()) {
           if (episode.showId == showId) {
             episodeIdsToDelete.add(episodeId);
           };
         };
         for (episodeId in episodeIdsToDelete.values()) {
-          episodes.remove(episodeId);
+          episodesV2.remove(episodeId);
         };
       };
     };
   };
 
   public query ({ caller }) func getShow(showId : Show.Id) : async Show.Show {
-    switch (shows.get(showId)) {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?show) {
         if (show.isPublic or caller == show.creatorId or AccessControl.isAdmin(accessControlState, caller)) {
@@ -227,7 +295,7 @@ actor {
   };
 
   public query ({ caller }) func getAllShows(publicOnly : Bool) : async [Show.Show] {
-    let iter = shows.values().map(
+    let iter = showsV2.values().map(
       func(show) {
         if (publicOnly) {
           if (show.isPublic) {
@@ -246,7 +314,7 @@ actor {
   public query func searchShows(searchTerm : Text) : async [Show.Show] {
     let results = List.empty<Show.Show>();
     let lowerSearchTerm = searchTerm.toLower();
-    for ((_, show) in shows.entries()) {
+    for ((_, show) in showsV2.entries()) {
       if (show.title.toLower().contains(#text lowerSearchTerm) and show.isPublic) {
         results.add(show);
       };
@@ -255,7 +323,7 @@ actor {
   };
 
   public query func getFeaturedShow() : async ?Show.Show {
-    for ((_, show) in shows.entries()) {
+    for ((_, show) in showsV2.entries()) {
       if (show.isFeatured and show.isPublic) {
         return ?show;
       };
@@ -263,11 +331,11 @@ actor {
     null;
   };
 
-  // Episodes — no auth required, frontend password gate handles access control
-  public shared ({ caller }) func createEpisode(showId : Show.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoBlob : ?Storage.ExternalBlob, duration : Nat) : async Episode.Episode {
-    switch (shows.get(showId)) {
+  // Episodes
+  public shared ({ caller }) func createEpisode(showId : Show.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async Episode.Episode {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
-      case (?show) {
+      case (?_show) {
         let id = nextEpisodeId;
         nextEpisodeId += 1;
         let episode : Episode.Episode = {
@@ -277,18 +345,18 @@ actor {
           episodeNumber;
           title;
           description;
-          videoBlob;
+          videoUrl;
           duration;
           createdAt = Time.now();
         };
-        episodes.add(id, episode);
+        episodesV2.add(id, episode);
         episode;
       };
     };
   };
 
-  public shared ({ caller }) func updateEpisode(episodeId : Episode.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoBlob : ?Storage.ExternalBlob, duration : Nat) : async () {
-    switch (episodes.get(episodeId)) {
+  public shared ({ caller }) func updateEpisode(episodeId : Episode.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async () {
+    switch (episodesV2.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (?existingEpisode) {
         let updatedEpisode : Episode.Episode = {
@@ -298,29 +366,29 @@ actor {
           episodeNumber;
           title;
           description;
-          videoBlob;
+          videoUrl;
           duration;
           createdAt = existingEpisode.createdAt;
         };
-        episodes.add(episodeId, updatedEpisode);
+        episodesV2.add(episodeId, updatedEpisode);
       };
     };
   };
 
   public shared ({ caller }) func deleteEpisode(episodeId : Episode.Id) : async () {
-    switch (episodes.get(episodeId)) {
+    switch (episodesV2.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
-      case (?episode) {
-        episodes.remove(episodeId);
+      case (?_) {
+        episodesV2.remove(episodeId);
       };
     };
   };
 
   public query ({ caller }) func getEpisode(episodeId : Episode.Id) : async Episode.Episode {
-    switch (episodes.get(episodeId)) {
+    switch (episodesV2.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (?episode) {
-        switch (shows.get(episode.showId)) {
+        switch (showsV2.get(episode.showId)) {
           case (null) { Runtime.trap("Show does not exist") };
           case (?show) {
             if (show.isPublic or caller == show.creatorId or AccessControl.isAdmin(accessControlState, caller)) {
@@ -335,14 +403,14 @@ actor {
   };
 
   public query ({ caller }) func getEpisodesByShow(showId : Show.Id) : async [Episode.Episode] {
-    switch (shows.get(showId)) {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?show) {
         if (not (show.isPublic or caller == show.creatorId or AccessControl.isAdmin(accessControlState, caller))) {
           Runtime.trap("Unauthorized: Show is not public");
         };
         let results = List.empty<Episode.Episode>();
-        for ((_, episode) in episodes.entries()) {
+        for ((_, episode) in episodesV2.entries()) {
           if (episode.showId == showId) {
             results.add(episode);
           };
@@ -353,14 +421,14 @@ actor {
   };
 
   public query ({ caller }) func getEpisodesBySeason(showId : Show.Id, seasonNumber : Nat) : async [Episode.Episode] {
-    switch (shows.get(showId)) {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?show) {
         if (not (show.isPublic or caller == show.creatorId or AccessControl.isAdmin(accessControlState, caller))) {
           Runtime.trap("Unauthorized: Show is not public");
         };
         let results = List.empty<Episode.Episode>();
-        for ((_, episode) in episodes.entries()) {
+        for ((_, episode) in episodesV2.entries()) {
           if (episode.showId == showId and episode.seasonNumber == seasonNumber) {
             results.add(episode);
           };
@@ -375,7 +443,7 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can add to watchlist");
     };
-    switch (shows.get(showId)) {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (_) {
         let entry : WatchlistEntry.WatchlistEntry = {
@@ -402,7 +470,7 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can remove from watchlist");
     };
-    switch (shows.get(showId)) {
+    switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (_) {
         let currentWatchlist = switch (watchlists.get(caller)) {
@@ -438,7 +506,7 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can save episode progress");
     };
-    switch (episodes.get(episodeId)) {
+    switch (episodesV2.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (_) {
         let progressEntry : EpisodeProgress.EpisodeProgress = {

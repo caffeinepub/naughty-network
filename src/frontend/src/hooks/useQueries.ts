@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Episode, Show, UserProfile, UserRole } from "../backend";
-import type { ExternalBlob } from "../backend";
 import { useActor } from "./useActor";
 
 export function useAllShows(publicOnly = true) {
@@ -153,14 +152,14 @@ export function useCreateShow() {
       title: string;
       description: string;
       genre: string;
-      thumbnailBlob: ExternalBlob | null;
+      thumbnailUrl: string;
       isPublic: boolean;
     }) =>
       actor!.createShow(
         data.title,
         data.description,
         data.genre,
-        data.thumbnailBlob,
+        data.thumbnailUrl,
         data.isPublic,
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["shows"] }),
@@ -176,7 +175,7 @@ export function useUpdateShow() {
       title: string;
       description: string;
       genre: string;
-      thumbnailBlob: ExternalBlob | null;
+      thumbnailUrl: string;
       isFeatured: boolean;
       isPublic: boolean;
     }) =>
@@ -185,7 +184,7 @@ export function useUpdateShow() {
         data.title,
         data.description,
         data.genre,
-        data.thumbnailBlob,
+        data.thumbnailUrl,
         data.isFeatured,
         data.isPublic,
       ),
@@ -212,7 +211,7 @@ export function useCreateEpisode() {
       episodeNumber: bigint;
       title: string;
       description: string;
-      videoBlob: ExternalBlob | null;
+      videoUrl: string;
       duration: bigint;
     }) =>
       actor!.createEpisode(
@@ -221,7 +220,7 @@ export function useCreateEpisode() {
         data.episodeNumber,
         data.title,
         data.description,
-        data.videoBlob,
+        data.videoUrl,
         data.duration,
       ),
     onSuccess: (_, vars) =>
@@ -240,7 +239,7 @@ export function useUpdateEpisode() {
       episodeNumber: bigint;
       title: string;
       description: string;
-      videoBlob: ExternalBlob | null;
+      videoUrl: string;
       duration: bigint;
     }) =>
       actor!.updateEpisode(
@@ -249,7 +248,7 @@ export function useUpdateEpisode() {
         data.episodeNumber,
         data.title,
         data.description,
-        data.videoBlob,
+        data.videoUrl,
         data.duration,
       ),
     onSuccess: (_, vars) =>
@@ -279,4 +278,9 @@ export function useAllUsers() {
     enabled: !!actor && !isFetching,
     refetchInterval: 5000,
   });
+}
+
+export function useStorageClient() {
+  const { actor } = useActor();
+  return actor ? { actor } : { actor: null };
 }

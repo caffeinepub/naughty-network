@@ -7,13 +7,6 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
-export class ExternalBlob {
-    getBytes(): Promise<Uint8Array<ArrayBuffer>>;
-    getDirectURL(): string;
-    static fromURL(url: string): ExternalBlob;
-    static fromBytes(blob: Uint8Array<ArrayBuffer>): ExternalBlob;
-    withUploadProgress(onProgress: (percentage: number) => void): ExternalBlob;
-}
 export interface Episode {
     id: Id;
     title: string;
@@ -21,7 +14,7 @@ export interface Episode {
     showId: Id;
     createdAt: bigint;
     description: string;
-    videoBlob?: ExternalBlob;
+    videoUrl: string;
     seasonNumber: bigint;
     episodeNumber: bigint;
 }
@@ -36,7 +29,7 @@ export interface Show {
     createdAt: bigint;
     creatorId: Principal;
     description: string;
-    thumbnailBlob?: ExternalBlob;
+    thumbnailUrl: string;
     isFeatured: boolean;
     genre: string;
     isPublic: boolean;
@@ -56,10 +49,11 @@ export enum UserRole {
     guest = "guest"
 }
 export interface backendInterface {
+    _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addToWatchlist(showId: Id): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    createEpisode(showId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoBlob: ExternalBlob | null, duration: bigint): Promise<Episode>;
-    createShow(title: string, description: string, genre: string, thumbnailBlob: ExternalBlob | null, isPublic: boolean): Promise<Show>;
+    createEpisode(showId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, duration: bigint): Promise<Episode>;
+    createShow(title: string, description: string, genre: string, thumbnailUrl: string, isPublic: boolean): Promise<Show>;
     deleteEpisode(episodeId: Id): Promise<void>;
     deleteShow(showId: Id): Promise<void>;
     getAllShows(publicOnly: boolean): Promise<Array<Show>>;
@@ -79,6 +73,6 @@ export interface backendInterface {
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;
     searchShows(searchTerm: string): Promise<Array<Show>>;
-    updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoBlob: ExternalBlob | null, duration: bigint): Promise<void>;
-    updateShow(showId: Id, title: string, description: string, genre: string, thumbnailBlob: ExternalBlob | null, isFeatured: boolean, isPublic: boolean): Promise<void>;
+    updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, duration: bigint): Promise<void>;
+    updateShow(showId: Id, title: string, description: string, genre: string, thumbnailUrl: string, isFeatured: boolean, isPublic: boolean): Promise<void>;
 }

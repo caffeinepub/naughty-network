@@ -1,15 +1,40 @@
 import { Maximize, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { useRef, useState } from "react";
-import type { ExternalBlob } from "../backend";
 
 interface VideoPlayerProps {
-  videoBlob?: ExternalBlob;
+  videoUrl?: string;
   posterUrl?: string;
   title?: string;
 }
 
+function getEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  // YouTube
+  const ytMatch = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/,
+  );
+  if (ytMatch) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0`;
+  }
+  // Vimeo
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  }
+  return null;
+}
+
+function isEmbedUrl(url: string): boolean {
+  return !!(
+    url &&
+    (url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("vimeo.com"))
+  );
+}
+
 export default function VideoPlayer({
-  videoBlob,
+  videoUrl,
   posterUrl,
   title,
 }: VideoPlayerProps) {
@@ -18,7 +43,8 @@ export default function VideoPlayer({
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const videoUrl = videoBlob?.getDirectURL();
+  const embedUrl = videoUrl ? getEmbedUrl(videoUrl) : null;
+  const isEmbed = videoUrl ? isEmbedUrl(videoUrl) : false;
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -57,6 +83,7 @@ export default function VideoPlayer({
     v.currentTime = pct * v.duration;
   };
 
+  // No video
   if (!videoUrl) {
     return (
       <div
@@ -84,12 +111,31 @@ export default function VideoPlayer({
     );
   }
 
+  // YouTube / Vimeo embed
+  if (isEmbed && embedUrl) {
+    return (
+      <div
+        className="relative w-full aspect-video bg-black rounded-lg overflow-hidden"
+        data-ocid="video.canvas_target"
+      >
+        <iframe
+          src={embedUrl}
+          title={title ?? "Video"}
+          className="w-full h-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  // Direct MP4 / other video URL
   return (
     <div
       className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group"
       data-ocid="video.canvas_target"
     >
-      {/* biome-ignore lint/a11y/useMediaCaption: streaming video player without caption support */}
+      {/* biome-ignore lint/a11y/useMediaCaption: streaming video player */}
       <video
         ref={videoRef}
         src={videoUrl}
@@ -101,7 +147,6 @@ export default function VideoPlayer({
 
       {/* Controls overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        {/* Progress bar */}
         <button
           type="button"
           className="absolute bottom-12 left-4 right-4 h-1 bg-white/30 rounded cursor-pointer"
@@ -114,7 +159,6 @@ export default function VideoPlayer({
           />
         </button>
 
-        {/* Buttons */}
         <div className="absolute bottom-3 left-4 right-4 flex items-center gap-3">
           <button
             type="button"
@@ -144,7 +188,6 @@ export default function VideoPlayer({
         </div>
       </div>
 
-      {/* Center play button */}
       <button
         type="button"
         onClick={togglePlay}

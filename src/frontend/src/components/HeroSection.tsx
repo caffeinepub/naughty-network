@@ -10,25 +10,22 @@ interface HeroSectionProps {
 export default function HeroSection({ show }: HeroSectionProps) {
   const navigate = useNavigate();
   const thumbnailUrl =
-    show.thumbnailBlob?.getDirectURL() ??
+    show.thumbnailUrl ||
     `https://picsum.photos/seed/${encodeURIComponent(show.title)}/1280/720`;
 
   return (
     <div className="relative w-full h-[90vh] min-h-[500px] overflow-hidden">
-      {/* Background image */}
       <div className="absolute inset-0">
         <img
           src={thumbnailUrl}
           alt={show.title}
           className="w-full h-full object-cover"
         />
-        {/* Gradients */}
         <div className="absolute inset-0 bg-gradient-to-r from-black via-black/50 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-transparent" />
       </div>
 
-      {/* Content */}
       <div className="relative z-10 flex flex-col justify-end h-full max-w-screen-2xl mx-auto px-4 md:px-16 pb-24 md:pb-32">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -76,7 +73,6 @@ export default function HeroSection({ show }: HeroSectionProps) {
         </motion.div>
       </div>
 
-      {/* TV-MA Badge */}
       <div className="absolute right-8 bottom-24 md:bottom-32 flex items-center gap-2">
         <span className="px-2 py-1 border border-white/60 text-white/60 text-xs font-bold tracking-widest">
           TV-MA

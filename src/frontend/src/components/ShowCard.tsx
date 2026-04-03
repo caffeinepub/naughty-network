@@ -26,7 +26,7 @@ export default function ShowCard({ show, index = 0 }: ShowCardProps) {
 
   const isInList = watchlist.some((id) => id === show.id);
   const thumbnailUrl =
-    show.thumbnailBlob?.getDirectURL() ??
+    show.thumbnailUrl ||
     `https://picsum.photos/seed/${encodeURIComponent(show.title)}/400/225`;
 
   const handlePlay = (e: React.MouseEvent) => {
@@ -44,9 +44,7 @@ export default function ShowCard({ show, index = 0 }: ShowCardProps) {
     }
   };
 
-  // Fake rating for visual interest
-  const rating = ((show.id % 20n) + 70n) / 10n;
-  const ratingNum = Number(rating) / 10 + 7;
+  const ratingNum = Number((show.id % 20n) + 70n) / 10 + 7;
 
   return (
     <motion.div
@@ -69,9 +67,10 @@ export default function ShowCard({ show, index = 0 }: ShowCardProps) {
           loading="lazy"
         />
 
-        {/* Hover overlay */}
         <div
-          className={`absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent transition-opacity duration-200 ${hovered ? "opacity-100" : "opacity-0"}`}
+          className={`absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent transition-opacity duration-200 ${
+            hovered ? "opacity-100" : "opacity-0"
+          }`}
         >
           <div className="absolute bottom-0 left-0 right-0 p-3">
             <p className="text-xs font-bold uppercase truncate text-white mb-1">

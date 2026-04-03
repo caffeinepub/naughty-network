@@ -39,7 +39,7 @@ export default function ShowPage() {
   const activeEpisode = selectedEpisode ?? episodes[0] ?? null;
 
   const posterUrl =
-    show?.thumbnailBlob?.getDirectURL() ??
+    show?.thumbnailUrl ||
     (show
       ? `https://picsum.photos/seed/${encodeURIComponent(show.title)}/1280/720`
       : undefined);
@@ -87,7 +87,6 @@ export default function ShowPage() {
   return (
     <main className="min-h-screen pt-20 pb-16" data-ocid="show.page">
       <div className="max-w-screen-xl mx-auto px-4 md:px-8">
-        {/* Back button */}
         <button
           type="button"
           onClick={() => navigate({ to: "/" })}
@@ -98,7 +97,6 @@ export default function ShowPage() {
         </button>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Left: player + info */}
           <div className="xl:col-span-2">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -106,12 +104,11 @@ export default function ShowPage() {
               transition={{ duration: 0.5 }}
             >
               <VideoPlayer
-                videoBlob={activeEpisode?.videoBlob}
+                videoUrl={activeEpisode?.videoUrl || undefined}
                 posterUrl={posterUrl}
                 title={activeEpisode?.title}
               />
 
-              {/* Show info */}
               <div className="mt-6">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
@@ -162,7 +159,6 @@ export default function ShowPage() {
             </motion.div>
           </div>
 
-          {/* Right: episode list */}
           <div className="xl:col-span-1">
             <h2 className="text-lg font-semibold mb-4">Episodes</h2>
             <EpisodeList
@@ -174,7 +170,6 @@ export default function ShowPage() {
           </div>
         </div>
 
-        {/* Suggested shows */}
         {suggestedShows.length > 0 && (
           <div className="mt-12">
             <ShowRow title="More Like This" shows={suggestedShows} />
