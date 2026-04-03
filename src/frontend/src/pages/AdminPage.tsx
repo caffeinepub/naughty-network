@@ -16,15 +16,13 @@ import {
   Lock,
   Plus,
   Trash2,
-  Upload,
   Users,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import type { Episode, Show } from "../backend";
-import { createStorageClient } from "../config";
 import {
   useAllShows,
   useAllUsers,
@@ -54,92 +52,6 @@ function ThumbnailPreview({ url }: { url: string }) {
         className="w-full h-full object-cover"
         onError={() => setError(true)}
       />
-    </div>
-  );
-}
-
-/** Reusable video URL field with an upload button beside it */
-function VideoField({
-  value,
-  onChange,
-  compact = false,
-}: {
-  value: string;
-  onChange: (url: string) => void;
-  compact?: boolean;
-}) {
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFile = async (file: File) => {
-    if (!file) return;
-    setUploading(true);
-    setProgress(0);
-    try {
-      const client = await createStorageClient();
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const { hash } = await client.putFile(bytes, (pct) => setProgress(pct));
-      const url = await client.getDirectURL(hash);
-      onChange(url);
-      toast.success("Video uploaded!");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Upload failed: ${msg.slice(0, 120)}`);
-    } finally {
-      setUploading(false);
-      setProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex gap-2">
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="YouTube, Vimeo, or direct .mp4 URL"
-          className={`bg-card border-border flex-1 ${compact ? "h-8 text-sm" : ""}`}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size={compact ? "sm" : "default"}
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-          className="border-border hover:border-primary/60 hover:text-primary flex-shrink-0"
-          title="Upload a video file"
-        >
-          {uploading ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Upload size={14} />
-          )}
-          {!compact && <span className="ml-1.5">Upload</span>}
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
-          }}
-        />
-      </div>
-      {uploading && (
-        <div className="w-full bg-border rounded-full h-1.5 overflow-hidden">
-          <div
-            className="h-full bg-primary transition-all duration-300 rounded-full"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      )}
-      <p className={`text-muted-foreground ${compact ? "text-xs" : "text-xs"}`}>
-        Paste a URL or click Upload to upload a video file directly.
-      </p>
     </div>
   );
 }
@@ -270,7 +182,7 @@ function ShowForm({
         />
         <ThumbnailPreview url={thumbnailUrl} />
         <p className="text-xs text-muted-foreground">
-          Paste a direct image URL. Host images for free on imgbb.com or
+          Paste a direct image URL. You can host images for free on imgbb.com or
           cloudinary.com.
         </p>
       </div>
@@ -414,8 +326,17 @@ function EpisodeForm({
         />
       </div>
       <div className="space-y-1.5">
-        <Label>Video</Label>
-        <VideoField value={videoUrl} onChange={setVideoUrl} />
+        <Label>Video URL</Label>
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="YouTube, Vimeo, or direct .mp4 URL"
+          className="bg-card border-border"
+          data-ocid="admin.episode.video.input"
+        />
+        <p className="text-xs text-muted-foreground">
+          Paste a YouTube link, Vimeo link, or direct .mp4 URL.
+        </p>
       </div>
       <Button
         type="submit"
@@ -543,8 +464,17 @@ function EpisodeEditForm({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Video</Label>
-        <VideoField value={videoUrl} onChange={setVideoUrl} compact />
+        <Label className="text-xs">Video URL</Label>
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="YouTube, Vimeo, or direct .mp4 URL"
+          className="bg-card border-border h-8 text-sm"
+          data-ocid="admin.episode.edit.video.input"
+        />
+        <p className="text-xs text-muted-foreground">
+          Paste a YouTube link, Vimeo link, or direct .mp4 URL.
+        </p>
       </div>
       <div className="flex gap-2 pt-1">
         <Button
