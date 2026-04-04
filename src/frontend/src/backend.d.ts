@@ -15,6 +15,7 @@ export interface Episode {
     createdAt: bigint;
     description: string;
     videoUrl: string;
+    thumbnailUrl: string;
     seasonNumber: bigint;
     episodeNumber: bigint;
 }
@@ -52,7 +53,7 @@ export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addToWatchlist(showId: Id): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    createEpisode(showId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, duration: bigint): Promise<Episode>;
+    createEpisode(showId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, thumbnailUrl: string, duration: bigint): Promise<Episode>;
     createShow(title: string, description: string, genre: string, thumbnailUrl: string, isPublic: boolean): Promise<Show>;
     deleteEpisode(episodeId: Id): Promise<void>;
     deleteShow(showId: Id): Promise<void>;
@@ -73,6 +74,6 @@ export interface backendInterface {
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;
     searchShows(searchTerm: string): Promise<Array<Show>>;
-    updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, duration: bigint): Promise<void>;
+    updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, thumbnailUrl: string, duration: bigint): Promise<void>;
     updateShow(showId: Id, title: string, description: string, genre: string, thumbnailUrl: string, isFeatured: boolean, isPublic: boolean): Promise<void>;
 }

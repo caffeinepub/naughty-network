@@ -23,6 +23,7 @@ export interface Episode {
     createdAt: bigint;
     description: string;
     videoUrl: string;
+    thumbnailUrl: string;
     seasonNumber: bigint;
     episodeNumber: bigint;
 }
@@ -60,7 +61,7 @@ export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addToWatchlist(showId: Id): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    createEpisode(showId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, duration: bigint): Promise<Episode>;
+    createEpisode(showId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, thumbnailUrl: string, duration: bigint): Promise<Episode>;
     createShow(title: string, description: string, genre: string, thumbnailUrl: string, isPublic: boolean): Promise<Show>;
     deleteEpisode(episodeId: Id): Promise<void>;
     deleteShow(showId: Id): Promise<void>;
@@ -81,7 +82,7 @@ export interface backendInterface {
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;
     searchShows(searchTerm: string): Promise<Array<Show>>;
-    updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, duration: bigint): Promise<void>;
+    updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, thumbnailUrl: string, duration: bigint): Promise<void>;
     updateShow(showId: Id, title: string, description: string, genre: string, thumbnailUrl: string, isFeatured: boolean, isPublic: boolean): Promise<void>;
 }
 
@@ -127,9 +128,9 @@ export class Backend implements backendInterface {
         const role = arg1 == UserRole.admin ? { admin: null } : arg1 == UserRole.user ? { user: null } : { guest: null };
         return this.call(() => this.actor.assignCallerUserRole(arg0, role));
     }
-    async createEpisode(arg0: Id, arg1: bigint, arg2: bigint, arg3: string, arg4: string, arg5: string, arg6: bigint): Promise<Episode> {
+    async createEpisode(arg0: Id, arg1: bigint, arg2: bigint, arg3: string, arg4: string, arg5: string, arg6: string, arg7: bigint): Promise<Episode> {
         return this.call(async () => {
-            const result = await this.actor.createEpisode(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+            const result = await this.actor.createEpisode(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
             return result as Episode;
         });
     }
@@ -229,8 +230,8 @@ export class Backend implements backendInterface {
             return result as Array<Show>;
         });
     }
-    async updateEpisode(arg0: Id, arg1: bigint, arg2: bigint, arg3: string, arg4: string, arg5: string, arg6: bigint): Promise<void> {
-        return this.call(() => this.actor.updateEpisode(arg0, arg1, arg2, arg3, arg4, arg5, arg6));
+    async updateEpisode(arg0: Id, arg1: bigint, arg2: bigint, arg3: string, arg4: string, arg5: string, arg6: string, arg7: bigint): Promise<void> {
+        return this.call(() => this.actor.updateEpisode(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7));
     }
     async updateShow(arg0: Id, arg1: string, arg2: string, arg3: string, arg4: string, arg5: boolean, arg6: boolean): Promise<void> {
         return this.call(() => this.actor.updateShow(arg0, arg1, arg2, arg3, arg4, arg5, arg6));

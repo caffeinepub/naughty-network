@@ -222,6 +222,7 @@ function EpisodeForm({
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("0");
   const [videoUrl, setVideoUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
   const createMutation = useCreateEpisode();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -235,6 +236,7 @@ function EpisodeForm({
         title,
         description,
         videoUrl,
+        thumbnailUrl,
         duration: BigInt(Math.round(Number(duration) * 60)),
       });
       toast.success("Episode created!");
@@ -338,6 +340,17 @@ function EpisodeForm({
           Paste a YouTube, Vimeo, or direct .mp4 URL.
         </p>
       </div>
+      <div className="space-y-2">
+        <Label>Thumbnail URL</Label>
+        <Input
+          value={thumbnailUrl}
+          onChange={(e) => setThumbnailUrl(e.target.value)}
+          placeholder="Paste image URL (e.g. from imgbb.com)"
+          className="bg-card border-border"
+          data-ocid="admin.episode.thumbnail.input"
+        />
+        <ThumbnailPreview url={thumbnailUrl} />
+      </div>
       <Button
         type="submit"
         disabled={createMutation.isPending}
@@ -377,6 +390,7 @@ function EpisodeEditForm({
     String(Math.round(Number(episode.duration) / 60)),
   );
   const [videoUrl, setVideoUrl] = useState(episode.videoUrl ?? "");
+  const [thumbnailUrl, setThumbnailUrl] = useState(episode.thumbnailUrl ?? "");
   const updateMutation = useUpdateEpisode();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -390,6 +404,7 @@ function EpisodeEditForm({
         title,
         description,
         videoUrl,
+        thumbnailUrl,
         duration: BigInt(Math.round(Number(duration) * 60)),
       });
       toast.success("Episode updated!");
@@ -475,6 +490,17 @@ function EpisodeEditForm({
         <p className="text-xs text-muted-foreground">
           Paste a YouTube, Vimeo, or direct .mp4 URL.
         </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Thumbnail URL</Label>
+        <Input
+          value={thumbnailUrl}
+          onChange={(e) => setThumbnailUrl(e.target.value)}
+          placeholder="Paste image URL (e.g. from imgbb.com)"
+          className="bg-card border-border h-8 text-sm"
+          data-ocid="admin.episode.edit.thumbnail.input"
+        />
+        <ThumbnailPreview url={thumbnailUrl} />
       </div>
       <div className="flex gap-2 pt-1">
         <Button

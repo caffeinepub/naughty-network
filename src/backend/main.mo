@@ -34,7 +34,7 @@ actor {
   // The previous version stored these types in stable maps named `shows` and `episodes`.
   // We keep those same variable names with the OLD types so the runtime can deserialise
   // existing stable memory without a compatibility error. Then in postupgrade we migrate
-  // all entries into the new `showsV2` / `episodesV2` maps and clear the old maps.
+  // all entries into the new `showsV2` / `episodesV3` maps and clear the old maps.
   type OldShow = {
     id : Nat;
     title : Text;
@@ -55,6 +55,19 @@ actor {
     title : Text;
     description : Text;
     videoBlob : ?Blob;
+    duration : Nat;
+    createdAt : Int;
+  };
+
+  // Episode type as it was stored in episodesV3 before thumbnailUrl was added
+  type OldEpisodeV2 = {
+    id : Nat;
+    showId : Nat;
+    seasonNumber : Nat;
+    episodeNumber : Nat;
+    title : Text;
+    description : Text;
+    videoUrl : Text;
     duration : Nat;
     createdAt : Int;
   };
@@ -95,6 +108,7 @@ actor {
       title : Text;
       description : Text;
       videoUrl : Text;
+      thumbnailUrl : Text;
       duration : Nat;
       createdAt : Int;
     };
@@ -134,8 +148,11 @@ actor {
   };
 
   // New URL-based stable maps (v2)
+  // episodesV3 uses OldEpisodeV2 (without thumbnailUrl) to stay compatible with existing stable memory
   let showsV2 = Map.empty<Show.Id, Show.Show>();
-  let episodesV2 = Map.empty<Episode.Id, Episode.Episode>();
+  let episodesV2 = Map.empty<Episode.Id, OldEpisodeV2>();
+  // episodesV3 is the new map with thumbnailUrl support
+  let episodesV3 = Map.empty<Episode.Id, Episode.Episode>();
   let watchlists = Map.empty<Principal, List.List<WatchlistEntry.WatchlistEntry>>();
   let progress = Map.empty<Principal, List.List<WatchProgress>>();
 
@@ -162,7 +179,7 @@ actor {
     shows.clear();
 
     for ((id, old) in episodes.entries()) {
-      let migrated : Episode.Episode = {
+      let migrated : OldEpisodeV2 = {
         id = old.id;
         showId = old.showId;
         seasonNumber = old.seasonNumber;
@@ -179,6 +196,29 @@ actor {
       };
     };
     episodes.clear();
+
+    // Migrate episodesV2 (without thumbnailUrl) -> episodesV3 (with thumbnailUrl)
+    for ((id, old) in episodesV2.entries()) {
+      if (episodesV3.get(id) == null) {
+        let migrated : Episode.Episode = {
+          id = old.id;
+          showId = old.showId;
+          seasonNumber = old.seasonNumber;
+          episodeNumber = old.episodeNumber;
+          title = old.title;
+          description = old.description;
+          videoUrl = old.videoUrl;
+          thumbnailUrl = "";
+          duration = old.duration;
+          createdAt = old.createdAt;
+        };
+        episodesV3.add(id, migrated);
+        if (old.id >= nextEpisodeId) {
+          nextEpisodeId := old.id + 1;
+        };
+      };
+    };
+    episodesV2.clear();
   };
 
   // User Profile Functions
@@ -269,13 +309,13 @@ actor {
       case (?_show) {
         showsV2.remove(showId);
         let episodeIdsToDelete = List.empty<Episode.Id>();
-        for ((episodeId, episode) in episodesV2.entries()) {
+        for ((episodeId, episode) in episodesV3.entries()) {
           if (episode.showId == showId) {
             episodeIdsToDelete.add(episodeId);
           };
         };
         for (episodeId in episodeIdsToDelete.values()) {
-          episodesV2.remove(episodeId);
+          episodesV3.remove(episodeId);
         };
       };
     };
@@ -329,7 +369,7 @@ actor {
   };
 
   // Episodes
-  public shared func createEpisode(showId : Show.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async Episode.Episode {
+  public shared func createEpisode(showId : Show.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, thumbnailUrl : Text, duration : Nat) : async Episode.Episode {
     switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?_show) {
@@ -343,17 +383,18 @@ actor {
           title;
           description;
           videoUrl;
+          thumbnailUrl;
           duration;
           createdAt = Time.now();
         };
-        episodesV2.add(id, episode);
+        episodesV3.add(id, episode);
         episode;
       };
     };
   };
 
-  public shared func updateEpisode(episodeId : Episode.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async () {
-    switch (episodesV2.get(episodeId)) {
+  public shared func updateEpisode(episodeId : Episode.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, thumbnailUrl : Text, duration : Nat) : async () {
+    switch (episodesV3.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (?existingEpisode) {
         let updatedEpisode : Episode.Episode = {
@@ -364,25 +405,26 @@ actor {
           title;
           description;
           videoUrl;
+          thumbnailUrl;
           duration;
           createdAt = existingEpisode.createdAt;
         };
-        episodesV2.add(episodeId, updatedEpisode);
+        episodesV3.add(episodeId, updatedEpisode);
       };
     };
   };
 
   public shared func deleteEpisode(episodeId : Episode.Id) : async () {
-    switch (episodesV2.get(episodeId)) {
+    switch (episodesV3.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (?_) {
-        episodesV2.remove(episodeId);
+        episodesV3.remove(episodeId);
       };
     };
   };
 
   public query ({ caller }) func getEpisode(episodeId : Episode.Id) : async Episode.Episode {
-    switch (episodesV2.get(episodeId)) {
+    switch (episodesV3.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (?episode) {
         switch (showsV2.get(episode.showId)) {
@@ -407,7 +449,7 @@ actor {
           Runtime.trap("Unauthorized: Show is not public");
         };
         let results = List.empty<Episode.Episode>();
-        for ((_, episode) in episodesV2.entries()) {
+        for ((_, episode) in episodesV3.entries()) {
           if (episode.showId == showId) {
             results.add(episode);
           };
@@ -425,7 +467,7 @@ actor {
           Runtime.trap("Unauthorized: Show is not public");
         };
         let results = List.empty<Episode.Episode>();
-        for ((_, episode) in episodesV2.entries()) {
+        for ((_, episode) in episodesV3.entries()) {
           if (episode.showId == showId and episode.seasonNumber == seasonNumber) {
             results.add(episode);
           };
@@ -503,7 +545,7 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can save episode progress");
     };
-    switch (episodesV2.get(episodeId)) {
+    switch (episodesV3.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (_) {
         let progressEntry : EpisodeProgress.EpisodeProgress = {

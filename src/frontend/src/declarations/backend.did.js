@@ -18,6 +18,7 @@ export const Episode = IDL.Record({
   'createdAt' : IDL.Int,
   'description' : IDL.Text,
   'videoUrl' : IDL.Text,
+  'thumbnailUrl' : IDL.Text,
   'seasonNumber' : IDL.Nat,
   'episodeNumber' : IDL.Nat,
 });
@@ -49,7 +50,7 @@ export const idlService = IDL.Service({
   'addToWatchlist' : IDL.Func([Id], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'createEpisode' : IDL.Func(
-      [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+      [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
       [Episode],
       [],
     ),
@@ -78,7 +79,7 @@ export const idlService = IDL.Service({
   'saveEpisodeProgress' : IDL.Func([Id, IDL.Nat], [], []),
   'searchShows' : IDL.Func([IDL.Text], [IDL.Vec(Show)], ['query']),
   'updateEpisode' : IDL.Func(
-      [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+      [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
       [],
       [],
     ),
@@ -106,6 +107,7 @@ export const idlFactory = ({ IDL }) => {
     'createdAt' : IDL.Int,
     'description' : IDL.Text,
     'videoUrl' : IDL.Text,
+    'thumbnailUrl' : IDL.Text,
     'seasonNumber' : IDL.Nat,
     'episodeNumber' : IDL.Nat,
   });
@@ -137,7 +139,7 @@ export const idlFactory = ({ IDL }) => {
     'addToWatchlist' : IDL.Func([Id], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'createEpisode' : IDL.Func(
-        [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
         [Episode],
         [],
       ),
@@ -166,7 +168,7 @@ export const idlFactory = ({ IDL }) => {
     'saveEpisodeProgress' : IDL.Func([Id, IDL.Nat], [], []),
     'searchShows' : IDL.Func([IDL.Text], [IDL.Vec(Show)], ['query']),
     'updateEpisode' : IDL.Func(
-        [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
         [],
         [],
       ),

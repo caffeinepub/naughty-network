@@ -14,6 +14,7 @@ export interface Episode {
   'createdAt' : bigint,
   'description' : string,
   'videoUrl' : string,
+  'thumbnailUrl' : string,
   'seasonNumber' : bigint,
   'episodeNumber' : bigint,
 }
@@ -48,7 +49,7 @@ export interface _SERVICE {
   'addToWatchlist' : ActorMethod<[Id], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'createEpisode' : ActorMethod<
-    [Id, bigint, bigint, string, string, string, bigint],
+    [Id, bigint, bigint, string, string, string, string, bigint],
     Episode
   >,
   'createShow' : ActorMethod<
@@ -75,7 +76,7 @@ export interface _SERVICE {
   'saveEpisodeProgress' : ActorMethod<[Id, bigint], undefined>,
   'searchShows' : ActorMethod<[string], Array<Show>>,
   'updateEpisode' : ActorMethod<
-    [Id, bigint, bigint, string, string, string, bigint],
+    [Id, bigint, bigint, string, string, string, string, bigint],
     undefined
   >,
   'updateShow' : ActorMethod<

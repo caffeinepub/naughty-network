@@ -212,6 +212,7 @@ export function useCreateEpisode() {
       title: string;
       description: string;
       videoUrl: string;
+      thumbnailUrl: string;
       duration: bigint;
     }) =>
       actor!.createEpisode(
@@ -221,6 +222,7 @@ export function useCreateEpisode() {
         data.title,
         data.description,
         data.videoUrl,
+        data.thumbnailUrl,
         data.duration,
       ),
     onSuccess: (_, vars) =>
@@ -240,6 +242,7 @@ export function useUpdateEpisode() {
       title: string;
       description: string;
       videoUrl: string;
+      thumbnailUrl: string;
       duration: bigint;
     }) =>
       actor!.updateEpisode(
@@ -249,6 +252,7 @@ export function useUpdateEpisode() {
         data.title,
         data.description,
         data.videoUrl,
+        data.thumbnailUrl,
         data.duration,
       ),
     onSuccess: (_, vars) =>
