@@ -35,6 +35,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isLoggedIn) {
+    // Redirect to login without causing infinite re-renders
     setTimeout(() => navigate({ to: "/login" }), 0);
     return null;
   }
@@ -54,6 +55,14 @@ function RootLayout() {
   );
 }
 
+function ProtectedLayout() {
+  return (
+    <AuthGuard>
+      <RootLayout />
+    </AuthGuard>
+  );
+}
+
 const rootRoute = createRootRoute();
 
 // Login route (standalone, no Navbar/Footer)
@@ -63,45 +72,29 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-// Public layout route (Navbar + Footer, no auth required)
-const layoutRoute = createRoute({
+// Protected layout route
+const protectedRoute = createRoute({
   getParentRoute: () => rootRoute,
-  id: "layout",
-  component: RootLayout,
+  id: "protected",
+  component: ProtectedLayout,
 });
 
-// Public routes
 const indexRoute = createRoute({
-  getParentRoute: () => layoutRoute,
+  getParentRoute: () => protectedRoute,
   path: "/",
   component: HomePage,
 });
 
 const showRoute = createRoute({
-  getParentRoute: () => layoutRoute,
+  getParentRoute: () => protectedRoute,
   path: "/show/$id",
   component: ShowPage,
 });
 
 const seriesRoute = createRoute({
-  getParentRoute: () => layoutRoute,
+  getParentRoute: () => protectedRoute,
   path: "/series",
   component: SeriesPage,
-});
-
-// Protected layout: same RootLayout but wrapped in AuthGuard
-function ProtectedLayout() {
-  return (
-    <AuthGuard>
-      <RootLayout />
-    </AuthGuard>
-  );
-}
-
-const protectedRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  id: "protected",
-  component: ProtectedLayout,
 });
 
 const myListRoute = createRoute({
@@ -124,8 +117,14 @@ const profileRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  layoutRoute.addChildren([indexRoute, showRoute, seriesRoute]),
-  protectedRoute.addChildren([myListRoute, adminRoute, profileRoute]),
+  protectedRoute.addChildren([
+    indexRoute,
+    showRoute,
+    seriesRoute,
+    myListRoute,
+    adminRoute,
+    profileRoute,
+  ]),
 ]);
 
 const hashHistory = createHashHistory();

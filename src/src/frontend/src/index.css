@@ -1,0 +1,76 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --background: 0.085 0.002 260;
+    --foreground: 0.96 0 0;
+    --card: 0.13 0.004 260;
+    --card-foreground: 0.96 0 0;
+    --popover: 0.16 0.004 260;
+    --popover-foreground: 0.96 0 0;
+    --primary: 0.49 0.22 26;
+    --primary-foreground: 0.98 0 0;
+    --secondary: 0.18 0.004 260;
+    --secondary-foreground: 0.96 0 0;
+    --muted: 0.18 0.004 260;
+    --muted-foreground: 0.72 0.01 240;
+    --accent: 0.49 0.22 26;
+    --accent-foreground: 0.98 0 0;
+    --destructive: 0.49 0.22 26;
+    --destructive-foreground: 0.98 0 0;
+    --border: 0.22 0.005 260;
+    --input: 0.22 0.005 260;
+    --ring: 0.49 0.22 26;
+    --chart-1: 0.646 0.222 41.116;
+    --chart-2: 0.6 0.118 184.704;
+    --chart-3: 0.398 0.07 227.392;
+    --chart-4: 0.828 0.189 84.429;
+    --chart-5: 0.769 0.188 70.08;
+    --sidebar: 0.13 0.004 260;
+    --sidebar-foreground: 0.96 0 0;
+    --sidebar-primary: 0.49 0.22 26;
+    --sidebar-primary-foreground: 0.98 0 0;
+    --sidebar-accent: 0.18 0.004 260;
+    --sidebar-accent-foreground: 0.96 0 0;
+    --sidebar-border: 0.22 0.005 260;
+    --sidebar-ring: 0.49 0.22 26;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: oklch(0.1 0 0);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.28 0 0);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.38 0 0);
+  }
+}

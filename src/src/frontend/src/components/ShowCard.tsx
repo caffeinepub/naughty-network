@@ -3,7 +3,7 @@ import { Check, Play, Plus, Star } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import type { Show } from "../backend";
-import { useAuth } from "../hooks/useAuth";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAddToWatchlist,
   useRemoveFromWatchlist,
@@ -17,7 +17,8 @@ interface ShowCardProps {
 
 export default function ShowCard({ show, index = 0 }: ShowCardProps) {
   const navigate = useNavigate();
-  const { isLoggedIn } = useAuth();
+  const { identity } = useInternetIdentity();
+  const isAuthenticated = !!identity;
   const [hovered, setHovered] = useState(false);
   const { data: watchlist = [] } = useWatchlist();
   const addMutation = useAddToWatchlist();
@@ -35,7 +36,7 @@ export default function ShowCard({ show, index = 0 }: ShowCardProps) {
 
   const handleWatchlist = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isLoggedIn) return;
+    if (!isAuthenticated) return;
     if (isInList) {
       removeMutation.mutate(show.id);
     } else {
@@ -95,7 +96,7 @@ export default function ShowCard({ show, index = 0 }: ShowCardProps) {
               >
                 <Play size={10} fill="currentColor" /> Play
               </button>
-              {isLoggedIn && (
+              {isAuthenticated && (
                 <button
                   type="button"
                   onClick={handleWatchlist}

@@ -1,12 +1,10 @@
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowLeft, Check, Lock, Play, Plus, Star } from "lucide-react";
+import { ArrowLeft, Check, Plus, Star } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import type { Episode } from "../backend";
-import AuthModal from "../components/AuthModal";
 import EpisodeList from "../components/EpisodeList";
 import ShowRow from "../components/ShowRow";
 import VideoPlayer from "../components/VideoPlayer";
@@ -36,7 +34,6 @@ export default function ShowPage() {
   const removeMutation = useRemoveFromWatchlist();
 
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const isInList = watchlist.some((wid) => wid === showId);
   const activeEpisode = selectedEpisode ?? episodes[0] ?? null;
@@ -58,14 +55,6 @@ export default function ShowPage() {
     } else {
       addMutation.mutate(showId);
     }
-  };
-
-  const handleEpisodeSelect = (episode: Episode) => {
-    if (!isLoggedIn) {
-      setAuthModalOpen(true);
-      return;
-    }
-    setSelectedEpisode(episode);
   };
 
   const ratingNum = (showId % 20n) + 70n;
@@ -114,71 +103,11 @@ export default function ShowPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              {/* Video player or locked overlay */}
-              {isLoggedIn ? (
-                <VideoPlayer
-                  videoUrl={activeEpisode?.videoUrl || undefined}
-                  posterUrl={posterUrl}
-                  title={activeEpisode?.title}
-                />
-              ) : (
-                <div
-                  className="relative w-full aspect-video rounded-xl overflow-hidden group"
-                  data-ocid="show.locked.canvas_target"
-                >
-                  {/* Blurred poster background */}
-                  {posterUrl && (
-                    <img
-                      src={posterUrl}
-                      alt={show.title}
-                      className="absolute inset-0 w-full h-full object-cover scale-105"
-                      style={{ filter: "blur(8px) brightness(0.35)" }}
-                    />
-                  )}
-                  {/* Dark overlay */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.4) 100%)",
-                    }}
-                  />
-                  {/* Lock content */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8">
-                    <div
-                      className="w-16 h-16 rounded-full flex items-center justify-center"
-                      style={{
-                        background: "oklch(0.49 0.22 26 / 0.15)",
-                        border: "2px solid oklch(0.49 0.22 26 / 0.5)",
-                      }}
-                    >
-                      <Lock size={28} className="text-primary" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-white font-bold text-lg mb-1">
-                        Sign in to watch
-                      </p>
-                      <p className="text-white/60 text-sm">
-                        Create a free account to start streaming
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={() => setAuthModalOpen(true)}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-6"
-                      data-ocid="show.locked.open_modal_button"
-                    >
-                      <Play size={15} className="mr-2" />
-                      Watch Now
-                    </Button>
-                  </div>
-                  {/* Hover pulse */}
-                  <div
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                    style={{ background: "oklch(0.49 0.22 26 / 0.04)" }}
-                  />
-                </div>
-              )}
+              <VideoPlayer
+                videoUrl={activeEpisode?.videoUrl || undefined}
+                posterUrl={posterUrl}
+                title={activeEpisode?.title}
+              />
 
               <div className="mt-6">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -243,7 +172,7 @@ export default function ShowPage() {
             <EpisodeList
               episodes={episodes}
               isLoading={epsLoading}
-              onSelectEpisode={handleEpisodeSelect}
+              onSelectEpisode={setSelectedEpisode}
               selectedEpisodeId={activeEpisode?.id}
             />
           </div>
@@ -255,13 +184,6 @@ export default function ShowPage() {
           </div>
         )}
       </div>
-
-      {/* Auth modal for locked content */}
-      <AuthModal
-        open={authModalOpen}
-        onOpenChange={setAuthModalOpen}
-        defaultTab="signup"
-      />
     </main>
   );
 }
