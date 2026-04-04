@@ -24,8 +24,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Episode, Show } from "../backend";
-import { createStorageClient } from "../config";
-import { useActor } from "../hooks/useActor";
+import { createStorageClientAnon } from "../config";
 import {
   useAllShows,
   useAllUsers,
@@ -42,12 +41,6 @@ type UserRecord = {
   principal: { toString(): string };
   name: string;
   joinedAt: bigint;
-};
-
-type StorageCertActor = {
-  _caffeineStorageCreateCertificate: (
-    hash: string,
-  ) => Promise<{ method: string; blob_hash: string }>;
 };
 
 function ThumbnailPreview({ url }: { url: string }) {
@@ -67,10 +60,8 @@ function ThumbnailPreview({ url }: { url: string }) {
 
 // Video upload button component - uploads a file and calls onUrl with the resulting URL
 function VideoUploadButton({
-  actor,
   onUrl,
 }: {
-  actor: StorageCertActor | null;
   onUrl: (url: string) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,16 +71,10 @@ function VideoUploadButton({
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!actor) {
-      toast.error("Not connected to backend. Please wait and try again.");
-      return;
-    }
     setUploading(true);
     setProgress(0);
     try {
-      const storageClient = await createStorageClient(
-        actor as StorageCertActor,
-      );
+      const storageClient = await createStorageClientAnon();
       const bytes = new Uint8Array(await file.arrayBuffer());
       const { hash } = await storageClient.putFile(bytes, (pct) => {
         setProgress(pct);
@@ -122,7 +107,7 @@ function VideoUploadButton({
         type="button"
         variant="outline"
         size="sm"
-        disabled={uploading || !actor}
+        disabled={uploading}
         onClick={() => fileInputRef.current?.click()}
         className="border-border hover:border-primary/60 hover:text-primary whitespace-nowrap"
         data-ocid="admin.episode.video.upload_button"
@@ -308,7 +293,6 @@ function EpisodeForm({
   initialShowId,
   onSuccess,
 }: { shows: Show[]; initialShowId?: bigint | null; onSuccess: () => void }) {
-  const { actor } = useActor();
   const [showId, setShowId] = useState<bigint | null>(
     initialShowId ?? shows[0]?.id ?? null,
   );
@@ -430,10 +414,7 @@ function EpisodeForm({
           className="bg-card border-border"
           data-ocid="admin.episode.video.input"
         />
-        <VideoUploadButton
-          actor={actor as unknown as StorageCertActor | null}
-          onUrl={setVideoUrl}
-        />
+        <VideoUploadButton onUrl={setVideoUrl} />
         <p className="text-xs text-muted-foreground">
           Paste a URL or upload a video file directly.
         </p>
@@ -469,7 +450,6 @@ function EpisodeEditForm({
   onSuccess: () => void;
   onCancel: () => void;
 }) {
-  const { actor } = useActor();
   const [season, setSeason] = useState(String(Number(episode.seasonNumber)));
   const [epNum, setEpNum] = useState(String(Number(episode.episodeNumber)));
   const [title, setTitle] = useState(episode.title);
@@ -573,10 +553,7 @@ function EpisodeEditForm({
           className="bg-card border-border h-8 text-sm"
           data-ocid="admin.episode.edit.video.input"
         />
-        <VideoUploadButton
-          actor={actor as unknown as StorageCertActor | null}
-          onUrl={setVideoUrl}
-        />
+        <VideoUploadButton onUrl={setVideoUrl} />
         <p className="text-xs text-muted-foreground">
           Paste a URL or upload a video file directly.
         </p>

@@ -87,9 +87,7 @@ function extractAgentErrorMessage(error: string): string {
 
 function processError(e: unknown): never {
   if (e && typeof e === "object" && "message" in e) {
-    throw new Error(
-      extractAgentErrorMessage(`${(e as { message: unknown }).message}`),
-    );
+    throw new Error(extractAgentErrorMessage(`${e.message}`));
   }
   throw e;
 }
@@ -98,6 +96,7 @@ async function maybeLoadMockBackend(): Promise<backendInterface | null> {
   if (import.meta.env.VITE_USE_MOCK !== "true") {
     return null;
   }
+
   try {
     const mockModules = import.meta.glob("./mocks/backend.{ts,tsx,js,jsx}");
     const path = Object.keys(mockModules)[0];
@@ -142,20 +141,33 @@ export async function createActorWithConfig(
   return createActor(config.backend_canister_id, actorOptions);
 }
 
-// Create a StorageClient for direct video uploads (used in admin panel)
-export async function createStorageClient(
-  actor: {
-    _caffeineStorageCreateCertificate: (
-      hash: string,
-    ) => Promise<{ method: string; blob_hash: string }>;
-  },
-): Promise<StorageClient> {
+/**
+ * Creates a StorageClient wired to the current project config and the given agent.
+ * The agent is used to call _caffeineStorageCreateCertificate on the backend canister.
+ */
+export async function createStorageClient(agent: HttpAgent): Promise<StorageClient> {
   const config = await loadConfig();
   return new StorageClient(
     config.bucket_name,
     config.storage_gateway_url,
     config.backend_canister_id,
     config.project_id,
-    actor,
+    agent,
+  );
+}
+
+/**
+ * Creates a StorageClient using a fresh anonymous agent (for admin uploads
+ * where the actor agent is not directly accessible).
+ */
+export async function createStorageClientAnon(): Promise<StorageClient> {
+  const config = await loadConfig();
+  const agent = new HttpAgent({ host: config.backend_host });
+  return new StorageClient(
+    config.bucket_name,
+    config.storage_gateway_url,
+    config.backend_canister_id,
+    config.project_id,
+    agent,
   );
 }

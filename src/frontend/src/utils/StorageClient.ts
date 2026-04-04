@@ -1,3 +1,6 @@
+import type { HttpAgent } from "@icp-sdk/core/agent";
+import { IDL } from "@icp-sdk/core/candid";
+
 type Headers = Record<string, string>;
 
 const MAXIMUM_CONCURRENT_UPLOADS = 10;
@@ -26,11 +29,19 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
       lastError = error instanceof Error ? error : new Error(String(error));
       const shouldRetry = isRetriableError(error);
       if (attempt === MAX_RETRIES || !shouldRetry) {
+        if (!shouldRetry && attempt < MAX_RETRIES) {
+          console.warn(
+            `Non-retriable error encountered: ${lastError.message}. Not retrying.`,
+          );
+        }
         throw error;
       }
       const delay = Math.min(
         BASE_DELAY_MS * 2 ** attempt + Math.random() * 1000,
         MAX_DELAY_MS,
+      );
+      console.warn(
+        `Request failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${lastError.message}. Retrying in ${Math.round(delay)}ms...`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
@@ -39,12 +50,10 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
   throw lastError || new Error("Unknown error occurred during retry attempts");
 }
 
-function isRetriableError(error: unknown): boolean {
-  const errorMessage =
-    (error as { message?: string })?.message?.toLowerCase() || "";
-  const status = (error as { response?: { status?: number } })?.response
-    ?.status;
-  if (status) {
+function isRetriableError(error: any): boolean {
+  const errorMessage = error?.message?.toLowerCase() || "";
+  if (error?.response?.status) {
+    const status = error.response.status;
     if (status === 408 || status === 429) return true;
     if (status >= 400 && status < 500) return false;
     if (status >= 500) return true;
@@ -73,20 +82,24 @@ function isRetriableError(error: unknown): boolean {
 }
 
 function validateHashFormat(hash: string, context: string): void {
-  if (!hash) throw new Error(`${context}: Hash cannot be empty`);
+  if (!hash) {
+    throw new Error(`${context}: Hash cannot be empty`);
+  }
   if (!hash.startsWith(SHA256_PREFIX)) {
     throw new Error(
-      `${context}: Invalid hash format. Expected ${SHA256_PREFIX}<64-char-hex>, got: ${hash}`,
+      `${context}: Invalid hash format. Expected format: ${SHA256_PREFIX}<64-char-hex>, got: ${hash}`,
     );
   }
   const hexPart = hash.substring(SHA256_PREFIX.length);
   if (hexPart.length !== 64) {
     throw new Error(
-      `${context}: Expected 64 hex chars after ${SHA256_PREFIX}, got ${hexPart.length}`,
+      `${context}: Invalid hash format. Expected 64 hex characters after ${SHA256_PREFIX}, got ${hexPart.length} characters: ${hash}`,
     );
   }
   if (!/^[0-9a-f]{64}$/i.test(hexPart)) {
-    throw new Error(`${context}: Hash must contain only hex characters`);
+    throw new Error(
+      `${context}: Invalid hash format. Hash must contain only hex characters (0-9, a-f), got: ${hash}`,
+    );
   }
 }
 
@@ -104,19 +117,20 @@ class YHash {
     left: YHash | null,
     right: YHash | null,
   ): Promise<YHash> {
-    const leftBytes =
+    let leftBytes =
       left instanceof YHash
         ? left.bytes
         : new TextEncoder().encode("UNBALANCED");
-    const rightBytes =
+    let rightBytes =
       right instanceof YHash
         ? right.bytes
         : new TextEncoder().encode("UNBALANCED");
     const combined = new Uint8Array(
       DOMAIN_SEPARATOR_FOR_NODES.length + leftBytes.length + rightBytes.length,
     );
+    const arrays = [DOMAIN_SEPARATOR_FOR_NODES, leftBytes, rightBytes];
     let offset = 0;
-    for (const data of [DOMAIN_SEPARATOR_FOR_NODES, leftBytes, rightBytes]) {
+    for (const data of arrays) {
       combined.set(data, offset);
       offset += data.length;
     }
@@ -134,10 +148,11 @@ class YHash {
       headerLines.push(`${key.trim()}: ${value.trim()}\n`);
     }
     headerLines.sort();
-    return YHash.fromBytes(
+    const hash = await YHash.fromBytes(
       DOMAIN_SEPARATOR_FOR_METADATA,
       new TextEncoder().encode(headerLines.join("")),
     );
+    return hash;
   }
 
   static async fromBytes(
@@ -214,6 +229,7 @@ class BlobHashTree {
     this.tree_type = "DSBMTWH";
     this.chunk_hashes = chunk_hashes;
     this.tree = tree;
+
     if (headers == null) {
       this.headers = [];
     } else if (Array.isArray(headers)) {
@@ -236,11 +252,13 @@ class BlobHashTree {
       const bytes = new TextEncoder().encode(hex);
       chunkHashes.push(new YHash(bytes));
     }
+
     let level: TreeNode[] = chunkHashes.map((hash) => ({
       hash,
       left: null,
       right: null,
     }));
+
     while (level.length > 1) {
       const nextLevel: TreeNode[] = [];
       for (let i = 0; i < level.length; i += 2) {
@@ -250,11 +268,17 @@ class BlobHashTree {
           left.hash,
           right ? right.hash : null,
         );
-        nextLevel.push({ hash: parentHash, left, right });
+        nextLevel.push({
+          hash: parentHash,
+          left,
+          right,
+        });
       }
       level = nextLevel;
     }
+
     const chunksRoot = level[0];
+
     if (headers && Object.keys(headers).length > 0) {
       const metadataRootHash = await YHash.fromHeaders(headers);
       const metadataRoot: TreeNode = {
@@ -273,6 +297,7 @@ class BlobHashTree {
       };
       return new BlobHashTree(chunkHashes, combinedRoot, headers);
     }
+
     return new BlobHashTree(chunkHashes, chunksRoot, headers);
   }
 
@@ -328,6 +353,7 @@ class StorageGatewayClient {
         project_id: params.projectId,
       });
       const url = `${this.storageGatewayUrl}/${GATEWAY_VERSION}/chunk/?${queryParams.toString()}`;
+
       const response = await fetch(url, {
         method: "PUT",
         headers: {
@@ -336,18 +362,22 @@ class StorageGatewayClient {
         },
         body: params.chunkData as BodyInit,
       });
+
       if (!response.ok) {
         const errorText = await response.text();
         const error = new Error(
           `Failed to upload chunk ${params.chunkIndex}: ${response.status} ${response.statusText} - ${errorText}`,
         );
-        (error as { response?: { status: number } }).response = {
-          status: response.status,
-        };
+        (error as any).response = { status: response.status };
         throw error;
       }
-      const result = (await response.json()) as { status: string };
-      return { isComplete: result.status === "blob_complete" };
+
+      const result = (await response.json()) as {
+        status: string;
+      };
+      return {
+        isComplete: result.status === "blob_complete",
+      };
     });
   }
 
@@ -357,8 +387,7 @@ class StorageGatewayClient {
     numBlobBytes: number,
     owner: string,
     projectId: string,
-    // The certificate result from _caffeineStorageCreateCertificate
-    certResult: { method: string; blob_hash: string },
+    authPayload: { method: string; blob_hash: string },
   ): Promise<void> {
     const treeJSON = blobHashTree.toJSON();
     validateHashFormat(treeJSON.tree.hash, "uploadBlobTree root hash");
@@ -375,12 +404,8 @@ class StorageGatewayClient {
         owner: owner,
         project_id: projectId,
         headers: blobHashTree.headers,
-        // Use OwnerCanisterMethod with the result from _caffeineStorageCreateCertificate
         auth: {
-          OwnerCanisterMethod: {
-            method: certResult.method,
-            blob_hash: certResult.blob_hash,
-          },
+          OwnerCanisterMethod: authPayload,
         },
       };
 
@@ -398,20 +423,11 @@ class StorageGatewayClient {
         const error = new Error(
           `Failed to upload blob tree: ${response.status} ${response.statusText} - ${errorText}`,
         );
-        (error as { response?: { status: number } }).response = {
-          status: response.status,
-        };
+        (error as any).response = { status: response.status };
         throw error;
       }
     });
   }
-}
-
-// Actor interface for storage certificate call
-interface StorageActor {
-  _caffeineStorageCreateCertificate(
-    blobHash: string,
-  ): Promise<{ method: string; blob_hash: string }>;
 }
 
 export class StorageClient {
@@ -422,16 +438,72 @@ export class StorageClient {
     storageGatewayUrl: string,
     private readonly backendCanisterId: string,
     private readonly projectId: string,
-    private readonly actor: StorageActor,
+    private readonly agent: HttpAgent,
   ) {
     this.storageGatewayClient = new StorageGatewayClient(storageGatewayUrl);
   }
 
-  private async getCertificate(
+  /**
+   * Calls _caffeineStorageCreateCertificate on the backend canister via the agent.
+   * The method takes a Text (the blob hash) and returns a record { method: Text; blob_hash: Text }.
+   * This record is sent to the gateway as the OwnerCanisterMethod auth payload.
+   */
+  private async getCertificatePayload(
     hash: string,
   ): Promise<{ method: string; blob_hash: string }> {
-    // Call through the backend actor which handles all Candid encoding/decoding
-    return await this.actor._caffeineStorageCreateCertificate(hash);
+    // Encode the argument: a single Text value
+    const argBytes = IDL.encode([IDL.Text], [hash]);
+
+    // Call the canister method
+    const callResult = await this.agent.call(this.backendCanisterId, {
+      methodName: "_caffeineStorageCreateCertificate",
+      arg: argBytes,
+    });
+
+    // The response body contains the Candid-encoded reply.
+    // We need to poll for the reply using the request ID.
+    const requestId = callResult.requestId;
+    const pollResult = await this.agent.readState(this.backendCanisterId, {
+      paths: [[new TextEncoder().encode("request_status"), requestId]],
+    });
+
+    // Extract reply bytes from the certificate
+    const cert = await (this.agent as any).createCertificate(pollResult);
+    const pathStatus = [
+      new TextEncoder().encode("request_status"),
+      requestId,
+      new TextEncoder().encode("status"),
+    ];
+    const status = new TextDecoder().decode(
+      cert.lookup(pathStatus) as ArrayBuffer,
+    );
+
+    if (status !== "replied") {
+      throw new Error(`Certificate call did not reply, status: ${status}`);
+    }
+
+    const pathReply = [
+      new TextEncoder().encode("request_status"),
+      requestId,
+      new TextEncoder().encode("reply"),
+    ];
+    const replyBytes = cert.lookup(pathReply) as Uint8Array;
+
+    // Decode the Candid response: record { method: Text; blob_hash: Text }
+    const ReturnType = IDL.Record({
+      method: IDL.Text,
+      blob_hash: IDL.Text,
+    });
+    const decoded = IDL.decode([ReturnType], replyBytes) as Array<{
+      method: string;
+      blob_hash: string;
+    }>;
+
+    if (!decoded || decoded.length === 0) {
+      throw new Error("Empty response from _caffeineStorageCreateCertificate");
+    }
+
+    return decoded[0];
   }
 
   public async putFile(
@@ -454,8 +526,8 @@ export class StorageClient {
     const blobRootHash = blobHashTree.tree.hash;
     const hashString = blobRootHash.toShaString();
 
-    // Get certificate from backend actor (returns { method, blob_hash })
-    const certResult = await this.getCertificate(hashString);
+    // Get the OwnerCanisterMethod auth payload from the backend
+    const authPayload = await this.getCertificatePayload(hashString);
 
     await this.storageGatewayClient.uploadBlobTree(
       blobHashTree,
@@ -463,7 +535,7 @@ export class StorageClient {
       file.size,
       this.backendCanisterId,
       this.projectId,
-      certResult,
+      authPayload,
     );
     await this.parallelUpload(
       chunks,
@@ -476,7 +548,9 @@ export class StorageClient {
   }
 
   public async getDirectURL(hash: string): Promise<string> {
-    if (!hash) throw new Error("Hash must not be empty");
+    if (!hash) {
+      throw new Error("Hash must not be empty");
+    }
     validateHashFormat(hash, `getDirectURL for path '${hash}'`);
     return `${this.storageGatewayClient.getStorageGatewayUrl()}/${GATEWAY_VERSION}/blob/?blob_hash=${encodeURIComponent(hash)}&owner_id=${encodeURIComponent(this.backendCanisterId)}&project_id=${encodeURIComponent(this.projectId)}`;
   }
@@ -552,7 +626,8 @@ export class StorageClient {
     for (let index = 0; index < totalChunks; index++) {
       const start = index * chunkSize;
       const end = Math.min(start + chunkSize, file.size);
-      chunks.push(file.slice(start, end));
+      const chunk = file.slice(start, end);
+      chunks.push(chunk);
     }
     return chunks;
   }
