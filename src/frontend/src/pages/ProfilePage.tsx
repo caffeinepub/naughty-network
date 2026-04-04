@@ -12,6 +12,7 @@ import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useCallerUserProfile,
   useCallerUserRole,
+  useRegisterUser,
   useSaveUserProfile,
 } from "../hooks/useQueries";
 
@@ -23,12 +24,19 @@ export default function ProfilePage() {
   const { data: profile, isLoading } = useCallerUserProfile();
   const { data: role } = useCallerUserRole();
   const saveMutation = useSaveUserProfile();
+  const { mutate: registerUser } = useRegisterUser();
 
   const [name, setName] = useState("");
 
   useEffect(() => {
     if (profile?.name) setName(profile.name);
   }, [profile?.name]);
+
+  useEffect(() => {
+    if (identity && !identity.getPrincipal().isAnonymous()) {
+      registerUser();
+    }
+  }, [identity, registerUser]);
 
   const handleSave = async () => {
     try {

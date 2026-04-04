@@ -754,7 +754,11 @@ function PasswordGate({ onUnlock }: { onUnlock: (pw: string) => boolean }) {
 export default function AdminPage() {
   const { unlocked, unlock } = useAdminAuth();
   const { data: shows = [], isLoading: showsLoading } = useAllShows(false);
-  const { data: users = [], isLoading: usersLoading } = useAllUsers();
+  const {
+    data: users = [],
+    isLoading: usersLoading,
+    refetch: refetchUsers,
+  } = useAllUsers();
   const deleteMutation = useDeleteShow();
   const [editingShow, setEditingShow] = useState<Show | null>(null);
   const [showShowForm, setShowShowForm] = useState(false);
@@ -1103,14 +1107,22 @@ export default function AdminPage() {
           <TabsContent value="users">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold">Registered Users</h2>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-sm text-muted-foreground">
-                  {!usersLoading &&
-                    `${users.length} user${
-                      users.length !== 1 ? "s" : ""
-                    } · live`}
-                </span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-sm text-muted-foreground">
+                    {!usersLoading
+                      ? `${users.length} user${users.length !== 1 ? "s" : ""} · live`
+                      : "Loading..."}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refetchUsers()}
+                  className="text-xs text-muted-foreground hover:text-white transition-colors border border-white/10 rounded px-2 py-1"
+                >
+                  Refresh
+                </button>
               </div>
             </div>
             {usersLoading ? (

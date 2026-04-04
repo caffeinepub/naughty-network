@@ -221,6 +221,14 @@ actor {
     episodesV2.clear();
   };
 
+  // Internal helper: record that a user exists (called on any authenticated action)
+  private func autoRegisterUser(caller : Principal) {
+    switch (userJoinedAt.get(caller)) {
+      case (null) { userJoinedAt.add(caller, Time.now()) };
+      case (?_) {};
+    };
+  };
+
   // User Profile Functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
@@ -236,30 +244,47 @@ actor {
     userProfiles.get(user);
   };
 
+  // Register a user without requiring a profile name.
+  // Called from the frontend immediately after login so every user is tracked.
+  public shared ({ caller }) func registerUser() : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can register");
+    };
+    autoRegisterUser(caller);
+  };
+
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
-    switch (userJoinedAt.get(caller)) {
-      case (null) { userJoinedAt.add(caller, Time.now()) };
-      case (?_) {};
-    };
+    autoRegisterUser(caller);
     userProfiles.add(caller, profile);
   };
 
-  // Admin: get all registered users
+  // Admin: get all registered users (includes anyone who has ever logged in)
   public query func getAllUsers() : async [UserRecord] {
     let results = List.empty<UserRecord>();
-    for ((principal, profile) in userProfiles.entries()) {
-      let joinedAt = switch (userJoinedAt.get(principal)) {
-        case (null) { 0 };
-        case (?t) { t };
+    // Include all principals that have a joinedAt timestamp (registered via registerUser or saveCallerUserProfile)
+    for ((principal, joinedAt) in userJoinedAt.entries()) {
+      let name = switch (userProfiles.get(principal)) {
+        case (null) { "" };
+        case (?profile) { profile.name };
       };
       results.add({
         principal;
-        name = profile.name;
+        name;
         joinedAt;
       });
+    };
+    // Also include anyone who has a profile but no joinedAt (legacy)
+    for ((principal, profile) in userProfiles.entries()) {
+      if (userJoinedAt.get(principal) == null) {
+        results.add({
+          principal;
+          name = profile.name;
+          joinedAt = 0;
+        });
+      };
     };
     results.toArray();
   };
@@ -334,7 +359,7 @@ actor {
     };
   };
 
-  public query ({ caller }) func getAllShows(publicOnly : Bool) : async [Show.Show] {
+  public query func getAllShows(publicOnly : Bool) : async [Show.Show] {
     let results = List.empty<Show.Show>();
     for ((_, show) in showsV2.entries()) {
       if (publicOnly) {
@@ -482,6 +507,7 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can add to watchlist");
     };
+    autoRegisterUser(caller);
     switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (_) {
@@ -545,6 +571,7 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can save episode progress");
     };
+    autoRegisterUser(caller);
     switch (episodesV3.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (_) {

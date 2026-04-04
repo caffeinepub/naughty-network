@@ -13,19 +13,27 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useRegisterUser } from "../hooks/useQueries";
 
 export default function Navbar() {
   const { identity, login, clear, loginStatus } = useInternetIdentity();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const isAuthenticated = !!identity;
+  const { mutate: registerUser } = useRegisterUser();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => {
+    if (identity && !identity.getPrincipal().isAnonymous()) {
+      registerUser();
+    }
+  }, [identity, registerUser]);
 
   const handleLogout = async () => {
     await clear();

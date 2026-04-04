@@ -70,6 +70,7 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWatchlist(): Promise<Array<Id>>;
     isCallerAdmin(): Promise<boolean>;
+    registerUser(): Promise<void>;
     removeFromWatchlist(showId: Id): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;

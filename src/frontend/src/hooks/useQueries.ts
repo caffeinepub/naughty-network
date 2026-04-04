@@ -272,19 +272,31 @@ export function useDeleteEpisode() {
 }
 
 export function useAllUsers() {
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
   return useQuery({
     queryKey: ["allUsers"],
     queryFn: async () => {
       if (!actor) return [];
       return (actor as any).getAllUsers();
     },
-    enabled: !!actor && !isFetching,
-    refetchInterval: 5000,
+    enabled: !!actor,
+    refetchInterval: 2000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 
 export function useStorageClient() {
   const { actor } = useActor();
   return actor ? { actor } : { actor: null };
+}
+
+export function useRegisterUser() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) return;
+      return (actor as any).registerUser();
+    },
+  });
 }
