@@ -40,6 +40,10 @@ export interface UserRecord {
     name: string;
     joinedAt: bigint;
 }
+export interface UserAccountSummary {
+    username: string;
+    createdAt: bigint;
+}
 export type Id = bigint;
 export interface UserProfile {
     name: string;
@@ -49,6 +53,7 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export type SignUpResult = { ok: string } | { err: string };
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addToWatchlist(showId: Id): Promise<void>;
@@ -59,6 +64,7 @@ export interface backendInterface {
     deleteShow(showId: Id): Promise<void>;
     getAllShows(publicOnly: boolean): Promise<Array<Show>>;
     getAllUsers(): Promise<Array<UserRecord>>;
+    getAllUsersV2(): Promise<Array<UserAccountSummary>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getContinueWatching(): Promise<Array<EpisodeProgress>>;
@@ -70,11 +76,15 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWatchlist(): Promise<Array<Id>>;
     isCallerAdmin(): Promise<boolean>;
+    login(username: string, passwordHash: string): Promise<string | null>;
+    logout(token: string): Promise<void>;
     registerUser(): Promise<void>;
     removeFromWatchlist(showId: Id): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;
     searchShows(searchTerm: string): Promise<Array<Show>>;
+    signUp(username: string, passwordHash: string): Promise<SignUpResult>;
     updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, thumbnailUrl: string, duration: bigint): Promise<void>;
     updateShow(showId: Id, title: string, description: string, genre: string, thumbnailUrl: string, isFeatured: boolean, isPublic: boolean): Promise<void>;
+    validateSession(token: string): Promise<string | null>;
 }

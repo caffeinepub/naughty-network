@@ -4,12 +4,9 @@ import { ListVideo } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo } from "react";
 import ShowCard from "../components/ShowCard";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useAllShows, useWatchlist } from "../hooks/useQueries";
 
 export default function MyListPage() {
-  const { identity, login } = useInternetIdentity();
-  const isAuthenticated = !!identity;
   const { data: watchlistIds = [], isLoading: wlLoading } = useWatchlist();
   const { data: allShows = [], isLoading: showsLoading } = useAllShows(true);
 
@@ -17,34 +14,6 @@ export default function MyListPage() {
     () => allShows.filter((s) => watchlistIds.some((id) => id === s.id)),
     [allShows, watchlistIds],
   );
-
-  if (!isAuthenticated) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center"
-        data-ocid="mylist.page"
-      >
-        <div className="text-center">
-          <ListVideo
-            size={64}
-            className="mx-auto mb-4 text-muted-foreground opacity-40"
-          />
-          <h2 className="text-2xl font-bold mb-2">Sign in to view your list</h2>
-          <p className="text-muted-foreground mb-6">
-            Keep track of your favorite shows.
-          </p>
-          <button
-            type="button"
-            onClick={() => login()}
-            className="px-6 py-2 bg-primary text-primary-foreground font-semibold rounded hover:bg-primary/90 transition-colors"
-            data-ocid="mylist.login.button"
-          >
-            Sign In
-          </button>
-        </div>
-      </main>
-    );
-  }
 
   const isLoading = wlLoading || showsLoading;
 

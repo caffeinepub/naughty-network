@@ -23,6 +23,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Episode, Show } from "../backend";
+
+interface UserAccountSummary {
+  username: string;
+  createdAt: bigint;
+}
 import {
   useAllShows,
   useAllUsers,
@@ -34,12 +39,6 @@ import {
   useUpdateEpisode,
   useUpdateShow,
 } from "../hooks/useQueries";
-
-type UserRecord = {
-  principal: { toString(): string };
-  name: string;
-  joinedAt: bigint;
-};
 
 function ThumbnailPreview({ url }: { url: string }) {
   const [error, setError] = useState(false);
@@ -1141,9 +1140,9 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="space-y-3" data-ocid="admin.users.list">
-                {users.map((user: UserRecord, i: number) => (
+                {users.map((user: UserAccountSummary, i: number) => (
                   <motion.div
-                    key={user.principal.toString()}
+                    key={user.username}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.04 }}
@@ -1154,18 +1153,16 @@ export default function AdminPage() {
                       <Users size={16} className="text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold truncate">
-                        {user.name || "Anonymous"}
-                      </p>
+                      <p className="font-semibold truncate">{user.username}</p>
                       <p className="text-xs text-muted-foreground truncate font-mono mt-0.5">
-                        {user.principal.toString().slice(0, 8)}...
+                        @{user.username}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-xs text-muted-foreground">Joined</p>
                       <p className="text-sm font-medium">
                         {new Date(
-                          Number(user.joinedAt) / 1_000_000,
+                          Number(user.createdAt) / 1_000_000,
                         ).toLocaleDateString()}
                       </p>
                     </div>

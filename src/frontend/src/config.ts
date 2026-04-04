@@ -3,6 +3,7 @@ import {
   type backendInterface,
   type CreateActorOptions,
 } from "./backend";
+import { StorageClient } from "./utils/StorageClient";
 import { HttpAgent } from "@icp-sdk/core/agent";
 
 const DEFAULT_STORAGE_GATEWAY_URL = "https://blob.caffeine.ai";
@@ -114,6 +115,9 @@ async function maybeLoadMockBackend(): Promise<backendInterface | null> {
   }
 }
 
+// Keep StorageClient available for any remaining references
+export { StorageClient };
+
 export async function createActorWithConfig(
   options?: CreateActorOptions,
 ): Promise<backendInterface> {
@@ -143,5 +147,8 @@ export async function createActorWithConfig(
     processError,
   };
 
-  return createActor(config.backend_canister_id, actorOptions);
+  return createActor(
+    config.backend_canister_id,
+    actorOptions,
+  );
 }

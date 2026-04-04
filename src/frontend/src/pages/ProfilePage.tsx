@@ -8,35 +8,27 @@ import { Loader2, Save, User } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useAuth } from "../hooks/useAuth";
 import {
   useCallerUserProfile,
   useCallerUserRole,
-  useRegisterUser,
   useSaveUserProfile,
 } from "../hooks/useQueries";
 
 export default function ProfilePage() {
-  const { identity, login, clear } = useInternetIdentity();
-  const isAuthenticated = !!identity;
+  const { isLoggedIn, username, logout } = useAuth();
   const qc = useQueryClient();
 
   const { data: profile, isLoading } = useCallerUserProfile();
   const { data: role } = useCallerUserRole();
   const saveMutation = useSaveUserProfile();
-  const { mutate: registerUser } = useRegisterUser();
 
   const [name, setName] = useState("");
 
   useEffect(() => {
     if (profile?.name) setName(profile.name);
-  }, [profile?.name]);
-
-  useEffect(() => {
-    if (identity && !identity.getPrincipal().isAnonymous()) {
-      registerUser();
-    }
-  }, [identity, registerUser]);
+    else if (username) setName(username);
+  }, [profile?.name, username]);
 
   const handleSave = async () => {
     try {
@@ -48,36 +40,9 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    await clear();
+    await logout();
     qc.clear();
   };
-
-  if (!isAuthenticated) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center"
-        data-ocid="profile.page"
-      >
-        <div className="text-center">
-          <User
-            size={64}
-            className="mx-auto mb-4 text-muted-foreground opacity-40"
-          />
-          <h2 className="text-2xl font-bold mb-2">
-            Sign in to view your profile
-          </h2>
-          <button
-            type="button"
-            onClick={() => login()}
-            className="px-6 py-2 bg-primary text-primary-foreground font-semibold rounded hover:bg-primary/90 transition-colors"
-            data-ocid="profile.login.button"
-          >
-            Sign In
-          </button>
-        </div>
-      </main>
-    );
-  }
 
   return (
     <main
@@ -107,7 +72,7 @@ export default function ProfilePage() {
                   {name ? name[0]?.toUpperCase() : <User size={28} />}
                 </div>
                 <div>
-                  <p className="font-semibold">{name || "Anonymous"}</p>
+                  <p className="font-semibold">{username ?? "Anonymous"}</p>
                   {role && (
                     <Badge
                       variant="outline"
@@ -151,22 +116,20 @@ export default function ProfilePage() {
               </Button>
 
               <div className="pt-4 border-t border-border">
-                <p className="text-xs text-muted-foreground mb-3">
-                  Principal ID
-                </p>
-                <code className="text-xs text-muted-foreground break-all">
-                  {identity?.getPrincipal().toString()}
-                </code>
+                <p className="text-xs text-muted-foreground mb-2">Account</p>
+                <p className="text-sm font-medium">{username}</p>
               </div>
 
-              <Button
-                variant="outline"
-                onClick={handleLogout}
-                className="border-red-500/40 text-red-400 hover:bg-red-500/10"
-                data-ocid="profile.logout.button"
-              >
-                Sign Out
-              </Button>
+              {isLoggedIn && (
+                <Button
+                  variant="outline"
+                  onClick={handleLogout}
+                  className="border-red-500/40 text-red-400 hover:bg-red-500/10"
+                  data-ocid="profile.logout.button"
+                >
+                  Sign Out
+                </Button>
+              )}
             </div>
           )}
         </div>

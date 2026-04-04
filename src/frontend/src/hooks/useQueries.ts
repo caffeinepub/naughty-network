@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Episode, Show, UserProfile, UserRole } from "../backend";
+
+// Defined locally since the backend actor is auto-generated without this type yet
+interface UserAccountSummary {
+  username: string;
+  createdAt: bigint;
+}
 import { useActor } from "./useActor";
 
 export function useAllShows(publicOnly = true) {
@@ -273,11 +279,11 @@ export function useDeleteEpisode() {
 
 export function useAllUsers() {
   const { actor } = useActor();
-  return useQuery({
+  return useQuery<UserAccountSummary[]>({
     queryKey: ["allUsers"],
     queryFn: async () => {
       if (!actor) return [];
-      return (actor as any).getAllUsers();
+      return (actor as any).getAllUsersV2() as Promise<UserAccountSummary[]>;
     },
     enabled: !!actor,
     refetchInterval: 2000,

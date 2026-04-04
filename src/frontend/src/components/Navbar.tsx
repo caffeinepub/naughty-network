@@ -13,32 +13,24 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useRegisterUser } from "../hooks/useQueries";
+import { useState } from "react";
+import { useAuth } from "../hooks/useAuth";
 
 export default function Navbar() {
-  const { identity, login, clear, loginStatus } = useInternetIdentity();
+  const { isLoggedIn, username, logout } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const isAuthenticated = !!identity;
-  const { mutate: registerUser } = useRegisterUser();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  useEffect(() => {
-    if (identity && !identity.getPrincipal().isAnonymous()) {
-      registerUser();
-    }
-  }, [identity, registerUser]);
-
   const handleLogout = async () => {
-    await clear();
+    await logout();
     qc.clear();
     setProfileOpen(false);
+    navigate({ to: "/login" });
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -49,6 +41,8 @@ export default function Navbar() {
       setSearchTerm("");
     }
   };
+
+  const displayName = username ? username.slice(0, 15) : null;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 h-16 bg-gradient-to-b from-black/90 to-transparent backdrop-blur-sm border-b border-white/5">
@@ -129,7 +123,7 @@ export default function Navbar() {
           </button>
 
           {/* Profile or Login */}
-          {isAuthenticated ? (
+          {isLoggedIn ? (
             <div className="relative">
               <button
                 type="button"
@@ -140,6 +134,11 @@ export default function Navbar() {
                 <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
                   <User size={14} className="text-primary-foreground" />
                 </div>
+                {displayName && (
+                  <span className="hidden md:block text-sm font-medium max-w-[120px] truncate">
+                    {displayName}
+                  </span>
+                )}
                 <ChevronDown size={14} className="text-muted-foreground" />
               </button>
 
@@ -191,15 +190,13 @@ export default function Navbar() {
               </AnimatePresence>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => login()}
-              disabled={loginStatus === "logging-in"}
-              className="hidden md:flex items-center px-4 py-1.5 bg-primary text-primary-foreground text-sm font-semibold rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
+            <Link
+              to="/login"
+              className="hidden md:flex items-center px-4 py-1.5 bg-primary text-primary-foreground text-sm font-semibold rounded hover:bg-primary/90 transition-colors"
               data-ocid="nav.login.button"
             >
-              {loginStatus === "logging-in" ? "Logging in..." : "Sign In"}
-            </button>
+              Sign In
+            </Link>
           )}
 
           {/* Mobile menu toggle */}
@@ -257,7 +254,7 @@ export default function Navbar() {
               >
                 <ShieldCheck size={14} /> Admin
               </Link>
-              {isAuthenticated ? (
+              {isLoggedIn ? (
                 <>
                   <Link
                     to="/profile"
@@ -277,17 +274,14 @@ export default function Navbar() {
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    login();
-                    setMenuOpen(false);
-                  }}
-                  className="py-3 text-sm font-semibold text-primary text-left"
+                <Link
+                  to="/login"
+                  className="py-3 text-sm font-semibold text-primary"
+                  onClick={() => setMenuOpen(false)}
                   data-ocid="nav.mobile.login.button"
                 >
                   Sign In
-                </button>
+                </Link>
               )}
             </div>
           </motion.div>

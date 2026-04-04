@@ -8,7 +8,7 @@ import type { Episode } from "../backend";
 import EpisodeList from "../components/EpisodeList";
 import ShowRow from "../components/ShowRow";
 import VideoPlayer from "../components/VideoPlayer";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useAuth } from "../hooks/useAuth";
 import {
   useAddToWatchlist,
   useAllShows,
@@ -19,11 +19,11 @@ import {
 } from "../hooks/useQueries";
 
 export default function ShowPage() {
-  const { id } = useParams({ from: "/show/$id" });
+  const params = useParams({ strict: false });
+  const id = params.id as string;
   const navigate = useNavigate();
   const showId = BigInt(id);
-  const { identity } = useInternetIdentity();
-  const isAuthenticated = !!identity;
+  const { isLoggedIn } = useAuth();
 
   const { data: show, isLoading: showLoading } = useShow(showId);
   const { data: episodes = [], isLoading: epsLoading } =
@@ -49,7 +49,7 @@ export default function ShowPage() {
     .slice(0, 8);
 
   const handleWatchlist = () => {
-    if (!isAuthenticated) return;
+    if (!isLoggedIn) return;
     if (isInList) {
       removeMutation.mutate(showId);
     } else {
@@ -136,7 +136,7 @@ export default function ShowPage() {
                       </span>
                     </div>
                   </div>
-                  {isAuthenticated && (
+                  {isLoggedIn && (
                     <button
                       type="button"
                       onClick={handleWatchlist}
@@ -147,12 +147,20 @@ export default function ShowPage() {
                       }`}
                       data-ocid="show.watchlist.button"
                     >
-                      {isInList ? <Check size={15} /> : <Plus size={15} />}
-                      {isInList ? "In My List" : "Add to My List"}
+                      {isInList ? (
+                        <>
+                          <Check size={15} /> In My List
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={15} /> Add to My List
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
-                <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+
+                <p className="mt-4 text-muted-foreground leading-relaxed">
                   {show.description}
                 </p>
               </div>

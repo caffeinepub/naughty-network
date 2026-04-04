@@ -16,7 +16,92 @@ actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // User Profile Type
+  // ── Username/Password Auth ──────────────────────────────────────────────────
+  public type UserAccount = {
+    username : Text;
+    passwordHash : Text;
+    createdAt : Int;
+  };
+
+  // key = lowercase username
+  let usersV1 = Map.empty<Text, UserAccount>();
+  // key = session token, value = username
+  let sessions = Map.empty<Text, Text>();
+
+  // Normalize username to lowercase for case-insensitive matching
+  private func normalizeUsername(username : Text) : Text {
+    username.toLower();
+  };
+
+  // Generate a simple session token from username + timestamp
+  private func generateToken(username : Text) : Text {
+    let ts = Time.now().toText();
+    username.concat("_").concat(ts);
+  };
+
+  public shared func signUp(username : Text, passwordHash : Text) : async { #ok : Text; #err : Text } {
+    // Validate username length
+    let uLen = username.size();
+    if (uLen < 3 or uLen > 20) {
+      return #err("Username must be between 3 and 20 characters");
+    };
+    // Check for valid characters (alphanumeric + underscore)
+    for (c in username.chars()) {
+      if (not (c.isAlphabetic() or c.isDigit() or c == '_')) {
+        return #err("Username can only contain letters, numbers, and underscores");
+      };
+    };
+    let normalized = normalizeUsername(username);
+    // Check uniqueness
+    switch (usersV1.get(normalized)) {
+      case (?_) { return #err("Username already taken") };
+      case (null) {};
+    };
+    if (passwordHash.size() < 8) {
+      return #err("Invalid password hash");
+    };
+    let account : UserAccount = {
+      username = username; // store original casing for display
+      passwordHash;
+      createdAt = Time.now();
+    };
+    usersV1.add(normalized, account);
+    #ok("Account created successfully");
+  };
+
+  public shared func login(username : Text, passwordHash : Text) : async ?Text {
+    let normalized = normalizeUsername(username);
+    switch (usersV1.get(normalized)) {
+      case (null) { null };
+      case (?account) {
+        if (account.passwordHash == passwordHash) {
+          let token = generateToken(normalized);
+          sessions.add(token, account.username);
+          ?token;
+        } else {
+          null;
+        };
+      };
+    };
+  };
+
+  public query func validateSession(token : Text) : async ?Text {
+    sessions.get(token);
+  };
+
+  public shared func logout(token : Text) : async () {
+    sessions.remove(token);
+  };
+
+  public query func getAllUsersV2() : async [{ username : Text; createdAt : Int }] {
+    let results = List.empty<{ username : Text; createdAt : Int }>();
+    for ((_, account) in usersV1.entries()) {
+      results.add({ username = account.username; createdAt = account.createdAt });
+    };
+    results.toArray();
+  };
+
+  // ── Legacy principal-based user profiles ────────────────────────────────────
   public type UserProfile = {
     name : Text;
   };
@@ -31,10 +116,6 @@ actor {
   let userJoinedAt = Map.empty<Principal, Int>();
 
   // ── Old types (for migration from blob-based storage) ──────────────────────
-  // The previous version stored these types in stable maps named `shows` and `episodes`.
-  // We keep those same variable names with the OLD types so the runtime can deserialise
-  // existing stable memory without a compatibility error. Then in postupgrade we migrate
-  // all entries into the new `showsV2` / `episodesV3` maps and clear the old maps.
   type OldShow = {
     id : Nat;
     title : Text;
@@ -59,7 +140,6 @@ actor {
     createdAt : Int;
   };
 
-  // Episode type as it was stored in episodesV3 before thumbnailUrl was added
   type OldEpisodeV2 = {
     id : Nat;
     showId : Nat;
@@ -72,7 +152,6 @@ actor {
     createdAt : Int;
   };
 
-  // Old stable maps -- same names as before so deserialization succeeds
   let shows = Map.empty<Nat, OldShow>();
   let episodes = Map.empty<Nat, OldEpisode>();
 
@@ -132,7 +211,6 @@ actor {
 
   type WatchProgress = EpisodeProgress.EpisodeProgress;
 
-  // Storage counters
   var nextShowId = 1;
   var nextEpisodeId = 1;
 
@@ -147,16 +225,12 @@ actor {
     };
   };
 
-  // New URL-based stable maps (v2)
-  // episodesV3 uses OldEpisodeV2 (without thumbnailUrl) to stay compatible with existing stable memory
   let showsV2 = Map.empty<Show.Id, Show.Show>();
   let episodesV2 = Map.empty<Episode.Id, OldEpisodeV2>();
-  // episodesV3 is the new map with thumbnailUrl support
   let episodesV3 = Map.empty<Episode.Id, Episode.Episode>();
   let watchlists = Map.empty<Principal, List.List<WatchlistEntry.WatchlistEntry>>();
   let progress = Map.empty<Principal, List.List<WatchProgress>>();
 
-  // Migration: on upgrade, copy old blob-based records into new URL-based maps
   system func postupgrade() {
     for ((id, old) in shows.entries()) {
       let migrated : Show.Show = {
@@ -171,7 +245,6 @@ actor {
         createdAt = old.createdAt;
       };
       showsV2.add(id, migrated);
-      // Keep nextShowId in sync
       if (old.id >= nextShowId) {
         nextShowId := old.id + 1;
       };
@@ -197,7 +270,6 @@ actor {
     };
     episodes.clear();
 
-    // Migrate episodesV2 (without thumbnailUrl) -> episodesV3 (with thumbnailUrl)
     for ((id, old) in episodesV2.entries()) {
       if (episodesV3.get(id) == null) {
         let migrated : Episode.Episode = {
@@ -221,7 +293,6 @@ actor {
     episodesV2.clear();
   };
 
-  // Internal helper: record that a user exists (called on any authenticated action)
   private func autoRegisterUser(caller : Principal) {
     switch (userJoinedAt.get(caller)) {
       case (null) { userJoinedAt.add(caller, Time.now()) };
@@ -229,7 +300,6 @@ actor {
     };
   };
 
-  // User Profile Functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can view profiles");
@@ -244,8 +314,6 @@ actor {
     userProfiles.get(user);
   };
 
-  // Register a user without requiring a profile name.
-  // Called from the frontend immediately after login so every user is tracked.
   public shared ({ caller }) func registerUser() : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can register");
@@ -261,10 +329,8 @@ actor {
     userProfiles.add(caller, profile);
   };
 
-  // Admin: get all registered users (includes anyone who has ever logged in)
   public query func getAllUsers() : async [UserRecord] {
     let results = List.empty<UserRecord>();
-    // Include all principals that have a joinedAt timestamp (registered via registerUser or saveCallerUserProfile)
     for ((principal, joinedAt) in userJoinedAt.entries()) {
       let name = switch (userProfiles.get(principal)) {
         case (null) { "" };
@@ -276,7 +342,6 @@ actor {
         joinedAt;
       });
     };
-    // Also include anyone who has a profile but no joinedAt (legacy)
     for ((principal, profile) in userProfiles.entries()) {
       if (userJoinedAt.get(principal) == null) {
         results.add({
