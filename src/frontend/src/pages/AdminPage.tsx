@@ -16,15 +16,13 @@ import {
   Lock,
   Plus,
   Trash2,
-  Upload,
   Users,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import type { Episode, Show } from "../backend";
-import { createStorageClientAnon } from "../config";
 import {
   useAllShows,
   useAllUsers,
@@ -54,84 +52,6 @@ function ThumbnailPreview({ url }: { url: string }) {
         className="w-full h-full object-cover"
         onError={() => setError(true)}
       />
-    </div>
-  );
-}
-
-// Video upload button component - uploads a file and calls onUrl with the resulting URL
-function VideoUploadButton({
-  onUrl,
-}: {
-  onUrl: (url: string) => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    setProgress(0);
-    try {
-      const storageClient = await createStorageClientAnon();
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const { hash } = await storageClient.putFile(bytes, (pct) => {
-        setProgress(pct);
-      });
-      const url = await storageClient.getDirectURL(hash);
-      onUrl(url);
-      toast.success("Video uploaded!");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Upload failed: ${msg.slice(0, 120)}`);
-    } finally {
-      setUploading(false);
-      setProgress(0);
-      // Reset file input so the same file can be re-selected
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*"
-        className="hidden"
-        onChange={handleFileChange}
-        disabled={uploading}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={uploading}
-        onClick={() => fileInputRef.current?.click()}
-        className="border-border hover:border-primary/60 hover:text-primary whitespace-nowrap"
-        data-ocid="admin.episode.video.upload_button"
-      >
-        {uploading ? (
-          <>
-            <Loader2 size={13} className="mr-1.5 animate-spin" />
-            {progress > 0 ? `${progress}%` : "Uploading..."}
-          </>
-        ) : (
-          <>
-            <Upload size={13} className="mr-1.5" />
-            Upload Video
-          </>
-        )}
-      </Button>
-      {uploading && progress > 0 && (
-        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[60px]">
-          <div
-            className="h-full bg-primary rounded-full transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -414,9 +334,8 @@ function EpisodeForm({
           className="bg-card border-border"
           data-ocid="admin.episode.video.input"
         />
-        <VideoUploadButton onUrl={setVideoUrl} />
         <p className="text-xs text-muted-foreground">
-          Paste a URL or upload a video file directly.
+          Paste a YouTube, Vimeo, or direct .mp4 URL.
         </p>
       </div>
       <Button
@@ -553,9 +472,8 @@ function EpisodeEditForm({
           className="bg-card border-border h-8 text-sm"
           data-ocid="admin.episode.edit.video.input"
         />
-        <VideoUploadButton onUrl={setVideoUrl} />
         <p className="text-xs text-muted-foreground">
-          Paste a URL or upload a video file directly.
+          Paste a YouTube, Vimeo, or direct .mp4 URL.
         </p>
       </div>
       <div className="flex gap-2 pt-1">

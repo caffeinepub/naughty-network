@@ -1,14 +1,5 @@
-import {
-  createActor,
-  type backendInterface,
-  type CreateActorOptions,
-} from "./backend";
-import { StorageClient } from "./utils/StorageClient";
+import { createActor, type backendInterface, type CreateActorOptions } from "./backend";
 import { HttpAgent } from "@icp-sdk/core/agent";
-
-const DEFAULT_STORAGE_GATEWAY_URL = "https://blob.caffeine.ai";
-const DEFAULT_BUCKET_NAME = "default-bucket";
-const DEFAULT_PROJECT_ID = "0000000-0000-0000-0000-00000000000";
 
 interface JsonConfig {
   backend_host: string;
@@ -20,8 +11,6 @@ interface JsonConfig {
 interface Config {
   backend_host?: string;
   backend_canister_id: string;
-  storage_gateway_url: string;
-  bucket_name: string;
   project_id: string;
   ii_derivation_origin?: string;
 }
@@ -49,12 +38,10 @@ export async function loadConfig(): Promise<Config> {
       backend_canister_id: (config.backend_canister_id === "undefined"
         ? backendCanisterId
         : config.backend_canister_id) as string,
-      storage_gateway_url: process.env.STORAGE_GATEWAY_URL ?? "nogateway",
-      bucket_name: DEFAULT_BUCKET_NAME,
       project_id:
         config.project_id !== "undefined"
           ? config.project_id
-          : DEFAULT_PROJECT_ID,
+          : "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin:
         config.ii_derivation_origin === "undefined"
           ? undefined
@@ -70,9 +57,7 @@ export async function loadConfig(): Promise<Config> {
     const fallbackConfig = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
-      storage_gateway_url: DEFAULT_STORAGE_GATEWAY_URL,
-      bucket_name: DEFAULT_BUCKET_NAME,
-      project_id: DEFAULT_PROJECT_ID,
+      project_id: "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin: undefined,
     };
     return fallbackConfig;
@@ -132,42 +117,11 @@ export async function createActorWithConfig(
       console.error(err);
     });
   }
-  const actorOptions = {
+  const actorOptions: CreateActorOptions = {
     ...resolvedOptions,
     agent: agent,
     processError,
   };
 
   return createActor(config.backend_canister_id, actorOptions);
-}
-
-/**
- * Creates a StorageClient wired to the current project config and the given agent.
- * The agent is used to call _caffeineStorageCreateCertificate on the backend canister.
- */
-export async function createStorageClient(agent: HttpAgent): Promise<StorageClient> {
-  const config = await loadConfig();
-  return new StorageClient(
-    config.bucket_name,
-    config.storage_gateway_url,
-    config.backend_canister_id,
-    config.project_id,
-    agent,
-  );
-}
-
-/**
- * Creates a StorageClient using a fresh anonymous agent (for admin uploads
- * where the actor agent is not directly accessible).
- */
-export async function createStorageClientAnon(): Promise<StorageClient> {
-  const config = await loadConfig();
-  const agent = new HttpAgent({ host: config.backend_host });
-  return new StorageClient(
-    config.bucket_name,
-    config.storage_gateway_url,
-    config.backend_canister_id,
-    config.project_id,
-    agent,
-  );
 }
