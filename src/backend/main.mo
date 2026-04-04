@@ -243,7 +243,7 @@ actor {
     show;
   };
 
-  public shared ({ caller }) func updateShow(showId : Show.Id, title : Text, description : Text, genre : Text, thumbnailUrl : Text, isFeatured : Bool, isPublic : Bool) : async () {
+  public shared func updateShow(showId : Show.Id, title : Text, description : Text, genre : Text, thumbnailUrl : Text, isFeatured : Bool, isPublic : Bool) : async () {
     switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?existingShow) {
@@ -263,7 +263,7 @@ actor {
     };
   };
 
-  public shared ({ caller }) func deleteShow(showId : Show.Id) : async () {
+  public shared func deleteShow(showId : Show.Id) : async () {
     switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?_show) {
@@ -329,7 +329,7 @@ actor {
   };
 
   // Episodes
-  public shared ({ caller }) func createEpisode(showId : Show.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async Episode.Episode {
+  public shared func createEpisode(showId : Show.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async Episode.Episode {
     switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (?_show) {
@@ -352,7 +352,7 @@ actor {
     };
   };
 
-  public shared ({ caller }) func updateEpisode(episodeId : Episode.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async () {
+  public shared func updateEpisode(episodeId : Episode.Id, seasonNumber : Nat, episodeNumber : Nat, title : Text, description : Text, videoUrl : Text, duration : Nat) : async () {
     switch (episodesV2.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (?existingEpisode) {
@@ -372,7 +372,7 @@ actor {
     };
   };
 
-  public shared ({ caller }) func deleteEpisode(episodeId : Episode.Id) : async () {
+  public shared func deleteEpisode(episodeId : Episode.Id) : async () {
     switch (episodesV2.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
       case (?_) {
