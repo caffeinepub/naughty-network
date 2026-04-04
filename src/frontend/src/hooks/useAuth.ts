@@ -1,149 +1,115 @@
+import { HttpAgent } from "@icp-sdk/core/agent";
+import type { Identity } from "@icp-sdk/core/agent";
 import {
   createContext,
+  createElement,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
-import { createElement } from "react";
 import type { ReactNode } from "react";
-import { createActorWithConfig } from "../config";
-
-const SESSION_TOKEN_KEY = "nn_session_token";
-const USERNAME_KEY = "nn_username";
-
-async function sha256Hex(password: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(password);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+import { createActor } from "../backend";
+import { loadConfig } from "../config";
+import {
+  InternetIdentityProvider,
+  useInternetIdentity,
+} from "./useInternetIdentity";
 
 interface AuthState {
   isLoggedIn: boolean;
   username: string | null;
-  sessionToken: string | null;
   isLoading: boolean;
-  login(
-    username: string,
-    password: string,
-  ): Promise<{ success: boolean; error?: string }>;
-  signUp(
-    username: string,
-    password: string,
-  ): Promise<{ success: boolean; error?: string }>;
-  logout(): Promise<void>;
+  needsUsername: boolean;
+  identity: Identity | undefined;
+  login: () => void;
+  logout: () => void;
+  setUsername: (name: string) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState<string | null>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+async function fetchUsernameForIdentity(
+  identity: Identity,
+): Promise<string | null> {
+  try {
+    const config = await loadConfig();
+    const agent = new HttpAgent({ host: config.backend_host, identity });
+    const actor = createActor(config.backend_canister_id, { agent });
+    return await actor.getUsernameByPrincipal();
+  } catch {
+    return null;
+  }
+}
 
-  // On mount, validate stored session
+function AuthStateProvider({ children }: { children: ReactNode }) {
+  const { identity, login, clear, isInitializing } = useInternetIdentity();
+
+  const [username, setUsernameState] = useState<string | null>(null);
+  const [usernameLoading, setUsernameLoading] = useState(false);
+  const lastCheckedIdentity = useRef<Identity | undefined>(undefined);
+
+  // When identity changes, fetch the username from backend
   useEffect(() => {
-    const storedToken = localStorage.getItem(SESSION_TOKEN_KEY);
-    const storedUsername = localStorage.getItem(USERNAME_KEY);
-
-    if (!storedToken || !storedUsername) {
-      setIsLoading(false);
+    if (!identity) {
+      setUsernameState(null);
+      lastCheckedIdentity.current = undefined;
       return;
     }
 
-    createActorWithConfig()
-      .then((actor) => actor.validateSession(storedToken))
-      .then((validUsername) => {
-        if (validUsername) {
-          setIsLoggedIn(true);
-          setUsername(validUsername);
-          setSessionToken(storedToken);
-        } else {
-          localStorage.removeItem(SESSION_TOKEN_KEY);
-          localStorage.removeItem(USERNAME_KEY);
-        }
-      })
-      .catch(() => {
-        localStorage.removeItem(SESSION_TOKEN_KEY);
-        localStorage.removeItem(USERNAME_KEY);
+    // Avoid re-fetching for the same identity
+    if (lastCheckedIdentity.current === identity) {
+      return;
+    }
+
+    lastCheckedIdentity.current = identity;
+    setUsernameLoading(true);
+
+    fetchUsernameForIdentity(identity)
+      .then((name) => {
+        setUsernameState(name);
       })
       .finally(() => {
-        setIsLoading(false);
+        setUsernameLoading(false);
       });
+  }, [identity]);
+
+  const logout = useCallback(() => {
+    setUsernameState(null);
+    lastCheckedIdentity.current = undefined;
+    clear();
+  }, [clear]);
+
+  const setUsername = useCallback((name: string) => {
+    setUsernameState(name);
   }, []);
 
-  const login = useCallback(async (uname: string, password: string) => {
-    try {
-      const hash = await sha256Hex(password);
-      const actor = await createActorWithConfig();
-      const token = await actor.login(uname, hash);
-      if (!token) {
-        return { success: false, error: "Invalid username or password" };
-      }
-      localStorage.setItem(SESSION_TOKEN_KEY, token);
-      localStorage.setItem(USERNAME_KEY, uname);
-      setIsLoggedIn(true);
-      setUsername(uname);
-      setSessionToken(token);
-      return { success: true };
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : "Login failed. Please try again.";
-      return { success: false, error: msg };
-    }
-  }, []);
-
-  const signUp = useCallback(
-    async (uname: string, password: string) => {
-      try {
-        const hash = await sha256Hex(password);
-        const actor = await createActorWithConfig();
-        const result = await actor.signUp(uname, hash);
-        if ("err" in result) {
-          return { success: false, error: result.err };
-        }
-        // Auto-login after successful signup
-        const loginResult = await login(uname, password);
-        return loginResult;
-      } catch (e) {
-        const msg =
-          e instanceof Error ? e.message : "Sign up failed. Please try again.";
-        return { success: false, error: msg };
-      }
-    },
-    [login],
-  );
-
-  const logout = useCallback(async () => {
-    try {
-      if (sessionToken) {
-        const actor = await createActorWithConfig();
-        await actor.logout(sessionToken);
-      }
-    } catch {
-      // ignore errors on logout
-    } finally {
-      localStorage.removeItem(SESSION_TOKEN_KEY);
-      localStorage.removeItem(USERNAME_KEY);
-      setIsLoggedIn(false);
-      setUsername(null);
-      setSessionToken(null);
-    }
-  }, [sessionToken]);
+  const hasIdentity = !!identity;
+  const isLoading = isInitializing || (hasIdentity && usernameLoading);
+  const isLoggedIn = hasIdentity && !usernameLoading && !!username;
+  const needsUsername = hasIdentity && !usernameLoading && !username;
 
   const value: AuthState = {
     isLoggedIn,
     username,
-    sessionToken,
     isLoading,
+    needsUsername,
+    identity,
     login,
-    signUp,
     logout,
+    setUsername,
   };
 
   return createElement(AuthContext.Provider, { value }, children);
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  return createElement(
+    InternetIdentityProvider,
+    null,
+    createElement(AuthStateProvider, null, children),
+  );
 }
 
 export function useAuth(): AuthState {

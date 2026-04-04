@@ -257,11 +257,7 @@ export default function ShowPage() {
       </div>
 
       {/* Auth modal for locked content */}
-      <AuthModal
-        open={authModalOpen}
-        onOpenChange={setAuthModalOpen}
-        defaultTab="signup"
-      />
+      <AuthModal open={authModalOpen} onOpenChange={setAuthModalOpen} />
     </main>
   );
 }

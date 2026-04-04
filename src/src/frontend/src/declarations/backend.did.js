@@ -44,6 +44,14 @@ export const EpisodeProgress = IDL.Record({
   'updatedAt' : IDL.Int,
   'timestamp' : IDL.Nat,
 });
+export const UserAccountSummary = IDL.Record({
+  'username' : IDL.Text,
+  'createdAt' : IDL.Int,
+});
+export const SignUpResult = IDL.Variant({
+  'ok' : IDL.Text,
+  'err' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
@@ -63,6 +71,7 @@ export const idlService = IDL.Service({
   'deleteShow' : IDL.Func([Id], [], []),
   'getAllShows' : IDL.Func([IDL.Bool], [IDL.Vec(Show)], ['query']),
   'getAllUsers' : IDL.Func([], [IDL.Vec(UserRecord)], ['query']),
+  'getAllUsersV2' : IDL.Func([], [IDL.Vec(UserAccountSummary)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getContinueWatching' : IDL.Func([], [IDL.Vec(EpisodeProgress)], ['query']),
@@ -74,10 +83,14 @@ export const idlService = IDL.Service({
   'getUserProfile' : IDL.Func([IDL.Principal], [IDL.Opt(UserProfile)], ['query']),
   'getWatchlist' : IDL.Func([], [IDL.Vec(Id)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'login' : IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], []),
+  'logout' : IDL.Func([IDL.Text], [], []),
+  'registerUser' : IDL.Func([], [], []),
   'removeFromWatchlist' : IDL.Func([Id], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'saveEpisodeProgress' : IDL.Func([Id, IDL.Nat], [], []),
   'searchShows' : IDL.Func([IDL.Text], [IDL.Vec(Show)], ['query']),
+  'signUp' : IDL.Func([IDL.Text, IDL.Text], [SignUpResult], []),
   'updateEpisode' : IDL.Func(
       [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
       [],
@@ -88,6 +101,7 @@ export const idlService = IDL.Service({
       [],
       [],
     ),
+  'validateSession' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
 });
 
 export const idlInitArgs = [];
@@ -133,6 +147,14 @@ export const idlFactory = ({ IDL }) => {
     'updatedAt' : IDL.Int,
     'timestamp' : IDL.Nat,
   });
+  const UserAccountSummary = IDL.Record({
+    'username' : IDL.Text,
+    'createdAt' : IDL.Int,
+  });
+  const SignUpResult = IDL.Variant({
+    'ok' : IDL.Text,
+    'err' : IDL.Text,
+  });
 
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
@@ -152,6 +174,7 @@ export const idlFactory = ({ IDL }) => {
     'deleteShow' : IDL.Func([Id], [], []),
     'getAllShows' : IDL.Func([IDL.Bool], [IDL.Vec(Show)], ['query']),
     'getAllUsers' : IDL.Func([], [IDL.Vec(UserRecord)], ['query']),
+    'getAllUsersV2' : IDL.Func([], [IDL.Vec(UserAccountSummary)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getContinueWatching' : IDL.Func([], [IDL.Vec(EpisodeProgress)], ['query']),
@@ -163,10 +186,14 @@ export const idlFactory = ({ IDL }) => {
     'getUserProfile' : IDL.Func([IDL.Principal], [IDL.Opt(UserProfile)], ['query']),
     'getWatchlist' : IDL.Func([], [IDL.Vec(Id)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'login' : IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], []),
+    'logout' : IDL.Func([IDL.Text], [], []),
+    'registerUser' : IDL.Func([], [], []),
     'removeFromWatchlist' : IDL.Func([Id], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'saveEpisodeProgress' : IDL.Func([Id, IDL.Nat], [], []),
     'searchShows' : IDL.Func([IDL.Text], [IDL.Vec(Show)], ['query']),
+    'signUp' : IDL.Func([IDL.Text, IDL.Text], [SignUpResult], []),
     'updateEpisode' : IDL.Func(
         [Id, IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
         [],
@@ -177,6 +204,7 @@ export const idlFactory = ({ IDL }) => {
         [],
         [],
       ),
+    'validateSession' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   });
 };
 

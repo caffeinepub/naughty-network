@@ -54,10 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     createActorWithConfig()
-      .then(
-        (actor) =>
-          (actor as any).validateSession(storedToken) as Promise<string | null>,
-      )
+      .then((actor) => actor.validateSession(storedToken))
       .then((validUsername) => {
         if (validUsername) {
           setIsLoggedIn(true);
@@ -81,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const hash = await sha256Hex(password);
       const actor = await createActorWithConfig();
-      const token = (await (actor as any).login(uname, hash)) as string | null;
+      const token = await actor.login(uname, hash);
       if (!token) {
         return { success: false, error: "Invalid username or password" };
       }
@@ -91,7 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsername(uname);
       setSessionToken(token);
       return { success: true };
-    } catch {
+    } catch (e) {
+      console.error("Login error:", e);
       return { success: false, error: "Login failed. Please try again." };
     }
   }, []);
@@ -101,16 +99,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const hash = await sha256Hex(password);
         const actor = await createActorWithConfig();
-        const result = (await (actor as any).signUp(uname, hash)) as
-          | { ok: string }
-          | { err: string };
+        const result = await actor.signUp(uname, hash);
         if ("err" in result) {
           return { success: false, error: result.err };
         }
         // Auto-login after successful signup
         const loginResult = await login(uname, password);
         return loginResult;
-      } catch {
+      } catch (e) {
+        console.error("SignUp error:", e);
         return { success: false, error: "Sign up failed. Please try again." };
       }
     },
@@ -121,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (sessionToken) {
         const actor = await createActorWithConfig();
-        await (actor as any).logout(sessionToken);
+        await actor.logout(sessionToken);
       }
     } catch {
       // ignore errors on logout

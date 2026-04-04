@@ -1,26 +1,36 @@
 # Naughty Network
 
 ## Current State
-The app has a custom username/password auth system. Currently ALL routes are protected behind AuthGuard -- users are redirected to /login immediately on page load. ShowCard still imports useInternetIdentity instead of useAuth. The backend getAllShows calls .sort() with no comparator which traps at runtime after a show is created, causing "Sign up failed" errors (signup triggers an auto-login which calls getAllShows). 
+The app uses a custom username/password auth system (on-chain). Users sign up with username + SHA-256 hashed password stored in `usersV1` map, with session tokens in a `sessions` map. The `useAuth` hook manages session tokens stored in localStorage. The `LoginPage` has two tabs: Sign In and Create Account, both using username/password forms. `config.ts` has a broken `ExternalBlob` import and calls `createActor` with 4 arguments (upload/download handlers) which don't exist, breaking actor initialization.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Auth modal (signup/login) that appears when a logged-out user clicks Play or tries to watch a show on ShowPage
-- Sign In button visible on navbar for logged-out users (already exists, keep)
+- Backend: `registerWithII(username: Text) : async { #ok : Text; #err : Text }` -- registers a new username for the caller's II principal. Stores `principalId -> username` mapping.
+- Backend: `getUsernameByPrincipal() : async ?Text` -- returns the stored username for the calling principal (null if not set yet).
+- Frontend: `UsernameSetupPage` -- full-screen page shown after first II login when user has no username yet. Lets user pick a username (3-20 chars, letters/numbers/underscores). On save, calls `registerWithII`, then navigates to homepage.
+- Frontend: Updated `useAuth` hook using Internet Identity (via `useInternetIdentity`) instead of username/password. Auth flow: (1) login with II, (2) check if principal has a username, (3) if no username, redirect to username setup, (4) if username exists, proceed as logged in.
+- Frontend: Updated `LoginPage` -- single "Sign in with Internet Identity" button, no username/password form.
 
 ### Modify
-- App.tsx: Remove AuthGuard from homepage (/), series (/series), and show page (/show/$id) routes -- these should be publicly browseable. Keep AuthGuard only on /my-list, /profile, /admin.
-- ShowCard.tsx: Replace useInternetIdentity with useAuth for auth state
-- ShowPage.tsx: When logged-out user tries to interact with the video player (or episode list), show an auth modal instead of playing. Show details, thumbnails, description, episode list titles are all visible without login. Only actual video playback is gated.
-- backend/main.mo: Fix getAllShows -- change results.toArray().sort() to results.toArray().sort(Show.compare) to prevent runtime trap
+- Backend: Keep all existing show/episode/watchlist/progress methods intact. Keep `usersV1` / `signUp` / `login` / `validateSession` for backwards compat but add the new II-based methods.
+- Backend: `getAllUsersV2` should return II-registered users (principalId -> username map) in addition to or instead of the old usersV1 map.
+- Frontend: `useAuth.ts` -- replace username/password session management with II identity + username lookup. `isLoggedIn` = has II identity AND has username. `username` = the stored username for their principal.
+- Frontend: `config.ts` -- fix broken `ExternalBlob` import (remove it) and fix `createActor` call to only pass `(canisterId, options)` with proper agent.
+- Frontend: `App.tsx` -- wrap app in `InternetIdentityProvider`. Route `/username-setup` as a semi-protected route (requires II identity but not username).
+- Frontend: `Navbar.tsx` -- show username from II auth. Sign out clears II identity.
+- Frontend: `AdminPage.tsx` -- users tab should use `getAllUsersV2` which now includes II-registered users.
 
 ### Remove
-- useInternetIdentity import from ShowCard.tsx
+- Frontend: Username/password form from `LoginPage` (both Sign In and Create Account tabs).
+- Frontend: `signUp`, `login`, `logout`, `validateSession` usage from `useAuth.ts` (replace with II flow).
 
 ## Implementation Plan
-1. Fix backend getAllShows sort comparator
-2. Update App.tsx routing -- public routes for /, /series, /show/$id; protected for /my-list, /profile, /admin
-3. Fix ShowCard.tsx to use useAuth instead of useInternetIdentity
-4. Add AuthModal component (reuses LoginPage form logic in a Dialog)
-5. Update ShowPage.tsx to show AuthModal when logged-out user clicks play/episode
+1. Add `registerWithII` and `getUsernameByPrincipal` to backend Motoko. Store a `principalUsernames: Map<Principal, Text>` and update `getAllUsersV2` to include these users.
+2. Update `backend.d.ts` and `backend.ts` IDL to include new methods.
+3. Fix `config.ts` to remove `ExternalBlob` import and pass only `(canisterId, options)` to `createActor`.
+4. Rewrite `useAuth.ts` to use II identity: on init, check II auth state; if authenticated, call `getUsernameByPrincipal`; expose `isLoggedIn` (has identity + username), `needsUsername` (has identity but no username), `username`, `login()` (triggers II popup), `logout()` (clears II).
+5. Add `UsernameSetupPage` component -- shown when `needsUsername` is true, calls `registerWithII`, then sets username in auth state.
+6. Rewrite `LoginPage` to show only the II login button.
+7. Update `App.tsx` to wrap in `InternetIdentityProvider` and add username-setup route.
+8. Update `Navbar.tsx` to show username and use II logout.

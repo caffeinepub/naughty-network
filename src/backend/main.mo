@@ -16,30 +16,16 @@ actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // ── Username/Password Auth ──────────────────────────────────────────────────
-  public type UserAccount = {
-    username : Text;
-    passwordHash : Text;
-    createdAt : Int;
-  };
+  // ── Internet Identity based auth ────────────────────────────────────────────
+  // key = principal text, value = chosen username
+  let principalUsernames = Map.empty<Text, Text>();
+  // key = username (lowercase), value = principal text (for uniqueness check)
+  let usernameIndex = Map.empty<Text, Text>();
 
-  // key = lowercase username
-  let usersV1 = Map.empty<Text, UserAccount>();
-  // key = session token, value = username
-  let sessions = Map.empty<Text, Text>();
-
-  // Normalize username to lowercase for case-insensitive matching
-  private func normalizeUsername(username : Text) : Text {
-    username.toLower();
-  };
-
-  // Generate a simple session token from username + timestamp
-  private func generateToken(username : Text) : Text {
-    let ts = Time.now().toText();
-    username.concat("_").concat(ts);
-  };
-
-  public shared func signUp(username : Text, passwordHash : Text) : async { #ok : Text; #err : Text } {
+  public shared ({ caller }) func registerWithII(username : Text) : async { #ok : Text; #err : Text } {
+    if (caller.isAnonymous()) {
+      return #err("Must be authenticated with Internet Identity");
+    };
     // Validate username length
     let uLen = username.size();
     if (uLen < 3 or uLen > 20) {
@@ -51,8 +37,80 @@ actor {
         return #err("Username can only contain letters, numbers, and underscores");
       };
     };
+    let normalized = username.toLower();
+    let callerText = caller.toText();
+    // If principal already has a username, return it
+    switch (principalUsernames.get(callerText)) {
+      case (?existingUsername) { return #ok(existingUsername) };
+      case (null) {};
+    };
+    // Check username uniqueness
+    switch (usernameIndex.get(normalized)) {
+      case (?_) { return #err("Username already taken") };
+      case (null) {};
+    };
+    principalUsernames.add(callerText, username);
+    usernameIndex.add(normalized, callerText);
+    // Also register the principal join time
+    switch (userJoinedAt.get(caller)) {
+      case (null) { userJoinedAt.add(caller, Time.now()) };
+      case (?_) {};
+    };
+    #ok(username);
+  };
+
+  public query ({ caller }) func getUsernameByPrincipal() : async ?Text {
+    if (caller.isAnonymous()) {
+      return null;
+    };
+    let callerText = caller.toText();
+    principalUsernames.get(callerText);
+  };
+
+  public query func getAllUsersV2() : async [{ username : Text; createdAt : Int }] {
+    let results = List.empty<{ username : Text; createdAt : Int }>();
+    // Include II-registered users
+    for ((principalText, username) in principalUsernames.entries()) {
+      let principal = Principal.fromText(principalText);
+      let createdAt = switch (userJoinedAt.get(principal)) {
+        case (?t) { t };
+        case (null) { 0 };
+      };
+      results.add({ username; createdAt });
+    };
+    results.toArray();
+  };
+
+  // ── Username/Password Auth (legacy, kept for data compatibility) ─────────────
+  public type UserAccount = {
+    username : Text;
+    passwordHash : Text;
+    createdAt : Int;
+  };
+
+  let usersV1 = Map.empty<Text, UserAccount>();
+  let sessions = Map.empty<Text, Text>();
+
+  private func normalizeUsername(username : Text) : Text {
+    username.toLower();
+  };
+
+  private func generateToken(username : Text) : Text {
+    let ts = Time.now().toText();
+    username.concat("_").concat(ts);
+  };
+
+  public shared func signUp(username : Text, passwordHash : Text) : async { #ok : Text; #err : Text } {
+    let uLen = username.size();
+    if (uLen < 3 or uLen > 20) {
+      return #err("Username must be between 3 and 20 characters");
+    };
+    for (c in username.chars()) {
+      if (not (c.isAlphabetic() or c.isDigit() or c == '_')) {
+        return #err("Username can only contain letters, numbers, and underscores");
+      };
+    };
     let normalized = normalizeUsername(username);
-    // Check uniqueness
     switch (usersV1.get(normalized)) {
       case (?_) { return #err("Username already taken") };
       case (null) {};
@@ -61,7 +119,7 @@ actor {
       return #err("Invalid password hash");
     };
     let account : UserAccount = {
-      username = username; // store original casing for display
+      username = username;
       passwordHash;
       createdAt = Time.now();
     };
@@ -91,14 +149,6 @@ actor {
 
   public shared func logout(token : Text) : async () {
     sessions.remove(token);
-  };
-
-  public query func getAllUsersV2() : async [{ username : Text; createdAt : Int }] {
-    let results = List.empty<{ username : Text; createdAt : Int }>();
-    for ((_, account) in usersV1.entries()) {
-      results.add({ username = account.username; createdAt = account.createdAt });
-    };
-    results.toArray();
   };
 
   // ── Legacy principal-based user profiles ────────────────────────────────────
@@ -301,9 +351,6 @@ actor {
   };
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
-    };
     userProfiles.get(caller);
   };
 
@@ -315,16 +362,10 @@ actor {
   };
 
   public shared ({ caller }) func registerUser() : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can register");
-    };
     autoRegisterUser(caller);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
     autoRegisterUser(caller);
     userProfiles.add(caller, profile);
   };
@@ -569,9 +610,6 @@ actor {
 
   // Watchlist
   public shared ({ caller }) func addToWatchlist(showId : Show.Id) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can add to watchlist");
-    };
     autoRegisterUser(caller);
     switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
@@ -597,9 +635,6 @@ actor {
   };
 
   public shared ({ caller }) func removeFromWatchlist(showId : Show.Id) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can remove from watchlist");
-    };
     switch (showsV2.get(showId)) {
       case (null) { Runtime.trap("Show does not exist") };
       case (_) {
@@ -619,9 +654,6 @@ actor {
   };
 
   public query ({ caller }) func getWatchlist() : async [Show.Id] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can get watchlist");
-    };
     switch (watchlists.get(caller)) {
       case (null) { [] };
       case (?watchlist) {
@@ -633,9 +665,6 @@ actor {
 
   // Watch Progress
   public shared ({ caller }) func saveEpisodeProgress(episodeId : Episode.Id, timestamp : Nat) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can save episode progress");
-    };
     autoRegisterUser(caller);
     switch (episodesV3.get(episodeId)) {
       case (null) { Runtime.trap("Episode does not exist") };
@@ -662,9 +691,6 @@ actor {
   };
 
   public query ({ caller }) func getContinueWatching() : async [EpisodeProgress.EpisodeProgress] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can get continue watching list");
-    };
     switch (progress.get(caller)) {
       case (null) { [] };
       case (?prog) {

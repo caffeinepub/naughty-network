@@ -48,6 +48,10 @@ export interface UserRecord {
     name: string;
     joinedAt: bigint;
 }
+export interface UserAccountSummary {
+    username: string;
+    createdAt: bigint;
+}
 export type Id = bigint;
 export interface UserProfile {
     name: string;
@@ -57,6 +61,7 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export type SignUpResult = { ok: string } | { err: string };
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addToWatchlist(showId: Id): Promise<void>;
@@ -67,6 +72,7 @@ export interface backendInterface {
     deleteShow(showId: Id): Promise<void>;
     getAllShows(publicOnly: boolean): Promise<Array<Show>>;
     getAllUsers(): Promise<Array<UserRecord>>;
+    getAllUsersV2(): Promise<Array<UserAccountSummary>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getContinueWatching(): Promise<Array<EpisodeProgress>>;
@@ -78,22 +84,17 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWatchlist(): Promise<Array<Id>>;
     isCallerAdmin(): Promise<boolean>;
+    login(username: string, passwordHash: string): Promise<string | null>;
+    logout(token: string): Promise<void>;
+    registerUser(): Promise<void>;
     removeFromWatchlist(showId: Id): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;
     searchShows(searchTerm: string): Promise<Array<Show>>;
+    signUp(username: string, passwordHash: string): Promise<SignUpResult>;
     updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, thumbnailUrl: string, duration: bigint): Promise<void>;
     updateShow(showId: Id, title: string, description: string, genre: string, thumbnailUrl: string, isFeatured: boolean, isPublic: boolean): Promise<void>;
-}
-
-function record_opt_to_undefined<T>(arg: T | null): T | undefined {
-    return arg == null ? undefined : arg;
-}
-function candid_some<T>(value: T): [T] {
-    return [value];
-}
-function candid_none<T>(): [] {
-    return [];
+    validateSession(token: string): Promise<string | null>;
 }
 
 function processError_default(e: unknown): never {
@@ -158,6 +159,12 @@ export class Backend implements backendInterface {
             return result as Array<UserRecord>;
         });
     }
+    async getAllUsersV2(): Promise<Array<UserAccountSummary>> {
+        return this.call(async () => {
+            const result = await this.actor.getAllUsersV2();
+            return result as Array<UserAccountSummary>;
+        });
+    }
     async getCallerUserProfile(): Promise<UserProfile | null> {
         return this.call(async () => {
             const result = await this.actor.getCallerUserProfile();
@@ -215,6 +222,18 @@ export class Backend implements backendInterface {
     async isCallerAdmin(): Promise<boolean> {
         return this.call(() => this.actor.isCallerAdmin());
     }
+    async login(arg0: string, arg1: string): Promise<string | null> {
+        return this.call(async () => {
+            const result = await this.actor.login(arg0, arg1);
+            return result.length === 0 ? null : result[0] as string;
+        });
+    }
+    async logout(arg0: string): Promise<void> {
+        return this.call(() => this.actor.logout(arg0));
+    }
+    async registerUser(): Promise<void> {
+        return this.call(() => this.actor.registerUser());
+    }
     async removeFromWatchlist(arg0: Id): Promise<void> {
         return this.call(() => this.actor.removeFromWatchlist(arg0));
     }
@@ -230,11 +249,25 @@ export class Backend implements backendInterface {
             return result as Array<Show>;
         });
     }
+    async signUp(arg0: string, arg1: string): Promise<SignUpResult> {
+        return this.call(async () => {
+            const result = await this.actor.signUp(arg0, arg1);
+            // Candid variant: { ok: string } or { err: string }
+            if ('ok' in result) return { ok: result.ok };
+            return { err: result.err };
+        });
+    }
     async updateEpisode(arg0: Id, arg1: bigint, arg2: bigint, arg3: string, arg4: string, arg5: string, arg6: string, arg7: bigint): Promise<void> {
         return this.call(() => this.actor.updateEpisode(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7));
     }
     async updateShow(arg0: Id, arg1: string, arg2: string, arg3: string, arg4: string, arg5: boolean, arg6: boolean): Promise<void> {
         return this.call(() => this.actor.updateShow(arg0, arg1, arg2, arg3, arg4, arg5, arg6));
+    }
+    async validateSession(arg0: string): Promise<string | null> {
+        return this.call(async () => {
+            const result = await this.actor.validateSession(arg0);
+            return result.length === 0 ? null : result[0] as string;
+        });
     }
 }
 

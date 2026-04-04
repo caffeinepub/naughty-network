@@ -83,11 +83,13 @@ export interface backendInterface {
     getFeaturedShow(): Promise<Show | null>;
     getShow(showId: Id): Promise<Show>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    getUsernameByPrincipal(): Promise<string | null>;
     getWatchlist(): Promise<Array<Id>>;
     isCallerAdmin(): Promise<boolean>;
     login(username: string, passwordHash: string): Promise<string | null>;
     logout(token: string): Promise<void>;
     registerUser(): Promise<void>;
+    registerWithII(username: string): Promise<SignUpResult>;
     removeFromWatchlist(showId: Id): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;
@@ -96,10 +98,6 @@ export interface backendInterface {
     updateEpisode(episodeId: Id, seasonNumber: bigint, episodeNumber: bigint, title: string, description: string, videoUrl: string, thumbnailUrl: string, duration: bigint): Promise<void>;
     updateShow(showId: Id, title: string, description: string, genre: string, thumbnailUrl: string, isFeatured: boolean, isPublic: boolean): Promise<void>;
     validateSession(token: string): Promise<string | null>;
-}
-
-function processError_default(e: unknown): never {
-    throw e;
 }
 
 export class Backend implements backendInterface {
@@ -217,6 +215,15 @@ export class Backend implements backendInterface {
             return result.length === 0 ? null : result[0] as UserProfile;
         });
     }
+    async getUsernameByPrincipal(): Promise<string | null> {
+        return this.call(async () => {
+            const result = await (this.actor as any).getUsernameByPrincipal();
+            if (Array.isArray(result)) {
+                return result.length === 0 ? null : result[0] as string;
+            }
+            return result as string | null;
+        });
+    }
     async getWatchlist(): Promise<Array<Id>> {
         return this.call(() => (this.actor as any).getWatchlist() as Promise<Array<Id>>);
     }
@@ -226,7 +233,6 @@ export class Backend implements backendInterface {
     async login(arg0: string, arg1: string): Promise<string | null> {
         return this.call(async () => {
             const result = await (this.actor as any).login(arg0, arg1);
-            // Candid optional: [] means null, [value] means Some
             if (Array.isArray(result)) {
                 return result.length === 0 ? null : result[0] as string;
             }
@@ -238,6 +244,16 @@ export class Backend implements backendInterface {
     }
     async registerUser(): Promise<void> {
         return this.call(() => (this.actor as any).registerUser());
+    }
+    async registerWithII(arg0: string): Promise<SignUpResult> {
+        return this.call(async () => {
+            const result = await (this.actor as any).registerWithII(arg0);
+            if (result && typeof result === 'object') {
+                if ('ok' in result) return { ok: result.ok as string };
+                if ('err' in result) return { err: result.err as string };
+            }
+            return { err: 'Unknown error' };
+        });
     }
     async removeFromWatchlist(arg0: Id): Promise<void> {
         return this.call(() => (this.actor as any).removeFromWatchlist(arg0));
@@ -257,7 +273,6 @@ export class Backend implements backendInterface {
     async signUp(arg0: string, arg1: string): Promise<SignUpResult> {
         return this.call(async () => {
             const result = await (this.actor as any).signUp(arg0, arg1);
-            // Candid variant: { ok: string } or { err: string }
             if (result && typeof result === 'object') {
                 if ('ok' in result) return { ok: result.ok as string };
                 if ('err' in result) return { err: result.err as string };

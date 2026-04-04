@@ -20,6 +20,7 @@ import MyListPage from "./pages/MyListPage";
 import ProfilePage from "./pages/ProfilePage";
 import SeriesPage from "./pages/SeriesPage";
 import ShowPage from "./pages/ShowPage";
+import UsernameSetupPage from "./pages/UsernameSetupPage";
 
 // Auth guard wrapper for protected routes
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -137,10 +138,18 @@ declare module "@tanstack/react-router" {
   }
 }
 
+// Username setup overlay -- shown when user has II identity but no username yet
+function UsernameSetupOverlay() {
+  const { needsUsername } = useAuth();
+  if (!needsUsername) return null;
+  return <UsernameSetupPage />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <IntroAnimation />
+      <UsernameSetupOverlay />
       <RouterProvider router={router} />
       <Toaster richColors position="bottom-right" />
     </AuthProvider>

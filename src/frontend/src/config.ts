@@ -36,7 +36,7 @@ export async function loadConfig(): Promise<Config> {
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
 
-    const fullConfig = {
+    const fullConfig: Config = {
       backend_host:
         config.backend_host === "undefined" ? undefined : config.backend_host,
       backend_canister_id: (config.backend_canister_id === "undefined"
@@ -58,7 +58,7 @@ export async function loadConfig(): Promise<Config> {
       console.error("CANISTER_ID_BACKEND is not set");
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
-    const fallbackConfig = {
+    const fallbackConfig: Config = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
       project_id: "0000000-0000-0000-0000-00000000000",
@@ -76,7 +76,7 @@ function extractAgentErrorMessage(error: string): string {
 
 function processError(e: unknown): never {
   if (e && typeof e === "object" && "message" in e) {
-    throw new Error(extractAgentErrorMessage(`${e.message}`));
+    throw new Error(extractAgentErrorMessage(`${(e as { message: string }).message}`));
   }
   throw e;
 }

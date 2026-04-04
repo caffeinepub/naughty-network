@@ -283,7 +283,7 @@ export function useAllUsers() {
     queryKey: ["allUsers"],
     queryFn: async () => {
       if (!actor) return [];
-      return (actor as any).getAllUsersV2() as Promise<UserAccountSummary[]>;
+      return actor.getAllUsersV2();
     },
     enabled: !!actor,
     refetchInterval: 2000,

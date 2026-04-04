@@ -74,11 +74,13 @@ export interface backendInterface {
     getFeaturedShow(): Promise<Show | null>;
     getShow(showId: Id): Promise<Show>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    getUsernameByPrincipal(): Promise<string | null>;
     getWatchlist(): Promise<Array<Id>>;
     isCallerAdmin(): Promise<boolean>;
     login(username: string, passwordHash: string): Promise<string | null>;
     logout(token: string): Promise<void>;
     registerUser(): Promise<void>;
+    registerWithII(username: string): Promise<SignUpResult>;
     removeFromWatchlist(showId: Id): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveEpisodeProgress(episodeId: Id, timestamp: bigint): Promise<void>;
