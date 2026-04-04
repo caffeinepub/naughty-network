@@ -14,12 +14,12 @@ function getEmbedUrl(url: string): string | null {
     /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/,
   );
   if (ytMatch) {
-    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0`;
+    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&fs=1&disablekb=0&color=white`;
   }
   // Vimeo
   const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
   if (vimeoMatch) {
-    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}?title=0&byline=0&portrait=0&badge=0&autopause=0&player_id=0&app_id=0`;
   }
   return null;
 }
@@ -39,6 +39,7 @@ export default function VideoPlayer({
   title,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -75,7 +76,17 @@ export default function VideoPlayer({
   };
 
   const handleFullscreen = () => {
-    videoRef.current?.requestFullscreen();
+    // For embed iframes, fullscreen the container div so it stays within Naughty Network
+    const el = containerRef.current;
+    if (el) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        el.requestFullscreen();
+      }
+    } else {
+      videoRef.current?.requestFullscreen();
+    }
   };
 
   const handleTimeUpdate = () => {
@@ -125,16 +136,25 @@ export default function VideoPlayer({
   if (isEmbed && embedUrl) {
     return (
       <div
+        ref={containerRef}
         className="relative w-full aspect-video bg-black rounded-lg overflow-hidden"
         data-ocid="video.canvas_target"
       >
         <iframe
           key={embedUrl}
           src={embedUrl}
-          title={title ?? "Video"}
-          className="w-full h-full"
+          title="video"
+          className="w-full h-full border-0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
+          style={{ border: "none" }}
+        />
+        {/* Overlay to block top info bar shown briefly on load */}
+        <div
+          className="absolute top-0 left-0 right-0 h-12 pointer-events-none"
+          style={{
+            background: "linear-gradient(to bottom, #000 0%, transparent 100%)",
+          }}
         />
       </div>
     );
@@ -143,6 +163,7 @@ export default function VideoPlayer({
   // Direct MP4 / other video URL
   return (
     <div
+      ref={containerRef}
       className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group"
       data-ocid="video.canvas_target"
     >

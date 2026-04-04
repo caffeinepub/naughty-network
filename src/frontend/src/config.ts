@@ -1,4 +1,8 @@
-import { createActor, type backendInterface, type CreateActorOptions } from "./backend";
+import {
+  createActor,
+  type backendInterface,
+  type CreateActorOptions,
+} from "./backend";
 import { HttpAgent } from "@icp-sdk/core/agent";
 
 interface JsonConfig {
@@ -38,10 +42,7 @@ export async function loadConfig(): Promise<Config> {
       backend_canister_id: (config.backend_canister_id === "undefined"
         ? backendCanisterId
         : config.backend_canister_id) as string,
-      project_id:
-        config.project_id !== "undefined"
-          ? config.project_id
-          : "0000000-0000-0000-0000-00000000000",
+      project_id: config.project_id ?? "",
       ii_derivation_origin:
         config.ii_derivation_origin === "undefined"
           ? undefined
@@ -57,7 +58,7 @@ export async function loadConfig(): Promise<Config> {
     const fallbackConfig = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
-      project_id: "0000000-0000-0000-0000-00000000000",
+      project_id: "",
       ii_derivation_origin: undefined,
     };
     return fallbackConfig;
@@ -86,9 +87,11 @@ async function maybeLoadMockBackend(): Promise<backendInterface | null> {
     const mockModules = import.meta.glob("./mocks/backend.{ts,tsx,js,jsx}");
     const path = Object.keys(mockModules)[0];
     if (!path) return null;
+
     const mod = (await mockModules[path]()) as {
       mockBackend?: backendInterface;
     };
+
     return mod.mockBackend ?? null;
   } catch {
     return null;
@@ -117,11 +120,10 @@ export async function createActorWithConfig(
       console.error(err);
     });
   }
-  const actorOptions: CreateActorOptions = {
-    ...resolvedOptions,
-    agent: agent,
-    processError,
-  };
 
-  return createActor(config.backend_canister_id, actorOptions);
+  return createActor(config.backend_canister_id, {
+    ...resolvedOptions,
+    agent,
+    processError,
+  });
 }
