@@ -41,9 +41,14 @@ export interface UserRecord {
   'name' : string,
   'joinedAt' : bigint,
 }
+export interface UserAccountSummary {
+  'username' : string,
+  'createdAt' : bigint,
+}
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export type SignUpResult = { 'ok' : string } | { 'err' : string };
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addToWatchlist' : ActorMethod<[Id], undefined>,
@@ -60,6 +65,7 @@ export interface _SERVICE {
   'deleteShow' : ActorMethod<[Id], undefined>,
   'getAllShows' : ActorMethod<[boolean], Array<Show>>,
   'getAllUsers' : ActorMethod<[], Array<UserRecord>>,
+  'getAllUsersV2' : ActorMethod<[], Array<UserAccountSummary>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getContinueWatching' : ActorMethod<[], Array<EpisodeProgress>>,
@@ -71,10 +77,14 @@ export interface _SERVICE {
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getWatchlist' : ActorMethod<[], Array<Id>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'login' : ActorMethod<[string, string], [] | [string]>,
+  'logout' : ActorMethod<[string], undefined>,
+  'registerUser' : ActorMethod<[], undefined>,
   'removeFromWatchlist' : ActorMethod<[Id], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'saveEpisodeProgress' : ActorMethod<[Id, bigint], undefined>,
   'searchShows' : ActorMethod<[string], Array<Show>>,
+  'signUp' : ActorMethod<[string, string], SignUpResult>,
   'updateEpisode' : ActorMethod<
     [Id, bigint, bigint, string, string, string, string, bigint],
     undefined
@@ -83,6 +93,7 @@ export interface _SERVICE {
     [Id, string, string, string, string, boolean, boolean],
     undefined
   >,
+  'validateSession' : ActorMethod<[string], [] | [string]>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
