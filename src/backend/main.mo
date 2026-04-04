@@ -16,7 +16,7 @@ actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // ── Internet Identity based auth ────────────────────────────────────────────
+  // \u2500\u2500 Internet Identity based auth \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // key = principal text, value = chosen username
   let principalUsernames = Map.empty<Text, Text>();
   // key = username (lowercase), value = principal text (for uniqueness check)
@@ -81,7 +81,7 @@ actor {
     results.toArray();
   };
 
-  // ── Username/Password Auth (legacy, kept for data compatibility) ─────────────
+  // \u2500\u2500 Username/Password Auth (legacy, kept for data compatibility) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   public type UserAccount = {
     username : Text;
     passwordHash : Text;
@@ -151,7 +151,7 @@ actor {
     sessions.remove(token);
   };
 
-  // ── Legacy principal-based user profiles ────────────────────────────────────
+  // \u2500\u2500 Legacy principal-based user profiles \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   public type UserProfile = {
     name : Text;
   };
@@ -165,7 +165,7 @@ actor {
   let userProfiles = Map.empty<Principal, UserProfile>();
   let userJoinedAt = Map.empty<Principal, Int>();
 
-  // ── Old types (for migration from blob-based storage) ──────────────────────
+  // \u2500\u2500 Old types (for migration from blob-based storage) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   type OldShow = {
     id : Nat;
     title : Text;
@@ -205,7 +205,7 @@ actor {
   let shows = Map.empty<Nat, OldShow>();
   let episodes = Map.empty<Nat, OldEpisode>();
 
-  // ── New types ───────────────────────────────────────────────────────────────
+  // \u2500\u2500 New types \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   module Show {
     public type Id = Nat;
 

@@ -36,16 +36,13 @@ export async function loadConfig(): Promise<Config> {
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
 
-    const fullConfig: Config = {
+    const fullConfig = {
       backend_host:
         config.backend_host === "undefined" ? undefined : config.backend_host,
       backend_canister_id: (config.backend_canister_id === "undefined"
         ? backendCanisterId
         : config.backend_canister_id) as string,
-      project_id:
-        config.project_id !== "undefined"
-          ? config.project_id
-          : "0000000-0000-0000-0000-00000000000",
+      project_id: config.project_id !== "undefined" ? config.project_id : "0000000-0000-0000-0000-00000000000",
       ii_derivation_origin:
         config.ii_derivation_origin === "undefined"
           ? undefined
@@ -58,7 +55,7 @@ export async function loadConfig(): Promise<Config> {
       console.error("CANISTER_ID_BACKEND is not set");
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
-    const fallbackConfig: Config = {
+    const fallbackConfig = {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
       project_id: "0000000-0000-0000-0000-00000000000",
@@ -76,7 +73,7 @@ function extractAgentErrorMessage(error: string): string {
 
 function processError(e: unknown): never {
   if (e && typeof e === "object" && "message" in e) {
-    throw new Error(extractAgentErrorMessage(`${(e as { message: string }).message}`));
+    throw new Error(extractAgentErrorMessage(`${e.message}`));
   }
   throw e;
 }
@@ -121,10 +118,11 @@ export async function createActorWithConfig(
       console.error(err);
     });
   }
-
-  return createActor(config.backend_canister_id, {
+  const actorOptions = {
     ...resolvedOptions,
-    agent,
+    agent: agent,
     processError,
-  });
+  };
+
+  return createActor(config.backend_canister_id, actorOptions);
 }

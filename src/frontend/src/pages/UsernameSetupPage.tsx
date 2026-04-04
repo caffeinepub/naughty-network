@@ -18,7 +18,7 @@ export default function UsernameSetupPage() {
   const validate = (val: string): string => {
     if (!val.trim()) return "Please enter a username.";
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(val.trim())) {
-      return "Username must be 3–20 characters: letters, numbers, or underscores only.";
+      return "Username must be 3\u201320 characters: letters, numbers, or underscores only.";
     }
     return "";
   };
@@ -143,7 +143,7 @@ export default function UsernameSetupPage() {
                 data-ocid="username_setup.input"
               />
               <p className="text-xs text-muted-foreground">
-                3–20 characters: letters, numbers, underscores
+                3\u201320 characters: letters, numbers, underscores
               </p>
             </div>
 

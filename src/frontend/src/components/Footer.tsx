@@ -1,9 +1,7 @@
-import { Heart } from "lucide-react";
+import React from "react";
 
 export default function Footer() {
   const year = new Date().getFullYear();
-  const hostname = window.location.hostname;
-  const utmLink = `https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(hostname)}`;
 
   return (
     <footer className="border-t border-border bg-black/50 mt-16">
@@ -97,19 +95,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-          <p>© {year} Naughty Network. All rights reserved.</p>
-          <p className="flex items-center gap-1">
-            Built with <Heart size={12} className="text-primary fill-primary" />{" "}
-            using{" "}
-            <a
-              href={utmLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              caffeine.ai
-            </a>
-          </p>
+          <p>\u00a9 {year} Naughty Network. All rights reserved.</p>
         </div>
       </div>
     </footer>
